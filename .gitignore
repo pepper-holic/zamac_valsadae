@@ -1,0 +1,12 @@
+data/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# VS Code / Copilot session metadata
+.claude/
+.omc/
+.playwright-mcp/
