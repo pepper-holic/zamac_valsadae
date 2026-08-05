@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 echo ============================================
 echo   Zamak_Valsadae - 강제 서버 종료
