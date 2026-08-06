@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Project } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
-import { transcribeProject } from '../api/client'
+import { getModelStatus, transcribeProject } from '../api/client'
 
 type Props = {
   project: Project
@@ -23,6 +23,24 @@ const MODEL_NOTES: Record<string, string> = {
 export function TranscribePanel({ project, onStarted }: Props) {
   const [model, setModel] = useState(project.whisper_model ?? 'small')
   const [error, setError] = useState<string | null>(null)
+  const [whisperCacheStatus, setWhisperCacheStatus] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    getModelStatus()
+      .then((status) => {
+        if (!cancelled) setWhisperCacheStatus(status.whisper)
+      })
+      .catch(() => {
+        // best-effort only - selectors just skip the download badge on failure
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const isModelCached = whisperCacheStatus[model]
+  const isDownloadingModel = project.status === 'transcribing' && project.stage === 'downloading_model'
 
   async function handleTranscribe() {
     setError(null)
@@ -62,7 +80,22 @@ export function TranscribePanel({ project, onStarted }: Props) {
         </button>
       </div>
       <p className="hint-text">{MODEL_NOTES[model]}</p>
-      {project.status === 'transcribing' && (
+      {!isBusy(project.status) && whisperCacheStatus[model] === false && (
+        <p className="hint-text">⬇ 이 모델은 아직 다운로드되지 않았습니다. 전사 시작 시 최초 1회 자동으로 다운로드됩니다.</p>
+      )}
+      {!isBusy(project.status) && isModelCached && (
+        <p className="hint-text">✓ 모델이 이미 다운로드되어 있습니다.</p>
+      )}
+      {project.status === 'transcribing' && isDownloadingModel && (
+        <div className="progress-block">
+          <div className="progress-bar progress-bar-indeterminate" />
+          <p className="hint-text">
+            모델 다운로드 중입니다 — 인터넷 연결이 필요하며 모델 크기에 따라 수 분~수십 분이 걸릴 수
+            있습니다. (최초 1회만 필요)
+          </p>
+        </div>
+      )}
+      {project.status === 'transcribing' && !isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar">
             <div

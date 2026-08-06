@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from app.services.whisper_service import _assess_transcription_quality, _progress_hook, transcribe
+from app.services.whisper_service import (
+    _assess_transcription_quality,
+    _progress_hook,
+    is_model_cached,
+    transcribe,
+)
 
 
 class FakeWhisperModel:
@@ -107,6 +112,23 @@ def test_transcribe_passes_media_path_as_string_to_model():
     assert fake_model.received_path == str(Path("some/video.mp4"))
 
 
+def test_is_model_cached_false_for_unknown_size():
+    assert is_model_cached("not-a-real-model-size") is False
+
+
+def test_is_model_cached_true_when_file_present_on_disk(tmp_path, monkeypatch):
+    import whisper
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    model_url = next(iter(whisper._MODELS.values()))
+    model_size = next(iter(whisper._MODELS.keys()))
+    cache_dir = tmp_path / "whisper"
+    cache_dir.mkdir()
+    (cache_dir / model_url.split("/")[-1]).write_bytes(b"fake-checkpoint")
+
+    assert is_model_cached(model_size) is True
+
+
 def test_transcribe_with_injected_model_ignores_on_progress():
     fake_model = FakeWhisperModel([{"start": 0.0, "end": 1.0, "text": "hi"}])
     calls = []
@@ -117,6 +139,15 @@ def test_transcribe_with_injected_model_ignores_on_progress():
 
     assert len(segments) == 1
     assert calls == []
+
+
+def test_transcribe_with_injected_model_ignores_on_stage():
+    fake_model = FakeWhisperModel([{"start": 0.0, "end": 1.0, "text": "hi"}])
+    stage_calls = []
+
+    transcribe(Path("video.mp4"), model_size="small", model=fake_model, on_stage=stage_calls.append)
+
+    assert stage_calls == []
 
 
 def test_progress_hook_reports_fractional_progress():

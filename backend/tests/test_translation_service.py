@@ -212,6 +212,19 @@ def test_local_translator_model_dir_changes_when_model_name_changes(tmp_path):
     assert old_dir != new_dir
 
 
+def test_local_translator_is_cached_false_when_model_dir_missing(tmp_path):
+    translator = LocalTranslator(cache_dir=tmp_path)
+
+    assert translator.is_cached("ko->en") is False
+
+
+def test_local_translator_is_cached_true_when_model_dir_exists(tmp_path):
+    translator = LocalTranslator(cache_dir=tmp_path)
+    translator._model_dir("ko->en", "Helsinki-NLP/opus-mt-ko-en").mkdir(parents=True)
+
+    assert translator.is_cached("ko->en") is True
+
+
 def test_local_translator_translate_of_empty_list_needs_no_model(tmp_path):
     translator = LocalTranslator(cache_dir=tmp_path)
 

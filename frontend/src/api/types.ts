@@ -12,6 +12,8 @@ export type ExportFormat = 'srt' | 'vtt' | 'json'
 
 export type QualityFlag = 'good' | 'check'
 
+export type ProgressStage = 'downloading_model' | 'processing'
+
 export interface Segment {
   id: string
   start: number
@@ -33,6 +35,7 @@ export interface Project {
   whisper_model: string | null
   error: string | null
   progress: number | null
+  stage: ProgressStage | null
   segments: Segment[]
 }
 
@@ -46,6 +49,11 @@ export interface ReviewDiffEntry {
 export interface ReviewImportResult {
   diffs: ReviewDiffEntry[]
   unknown_segment_ids: string[]
+}
+
+export interface ModelStatus {
+  whisper: Record<string, boolean>
+  translation: Record<string, boolean>
 }
 
 export const WHISPER_MODELS = [

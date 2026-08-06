@@ -7,7 +7,7 @@ from app.api.deps import get_store
 from app.core.config import WHISPER_MODEL_SIZES
 from app.models.schemas import Project, TranscribeRequest
 from app.services import whisper_service
-from app.services.progress_reporter import make_progress_reporter
+from app.services.progress_reporter import make_progress_reporter, make_stage_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 
 router = APIRouter(prefix="/projects", tags=["transcribe"])
@@ -21,14 +21,17 @@ def _run_transcription(project_id: str, model_size: str, store: ProjectStore) ->
             Path(project.media_path),
             model_size=model_size,
             on_progress=make_progress_reporter(project, store),
+            on_stage=make_stage_reporter(project, store),
         )
         project.segments = segments
         project.status = "transcribed"
         project.progress = 1.0
+        project.stage = None
         project.error = None
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps
         logger.exception("Transcription failed for project %s", project_id)
         project.status = "error"
+        project.stage = None
         project.error = str(exc)
     store.save(project)
 
@@ -50,6 +53,7 @@ async def transcribe_project(
     project.status = "transcribing"
     project.whisper_model = request.model
     project.progress = 0.0
+    project.stage = None
     project.error = None
     store.save(project)
 

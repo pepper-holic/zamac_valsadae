@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import export, projects, review, segments, transcribe, translate
+from app.api import export, models, projects, review, segments, transcribe, translate
 
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(projects.router)
+    app.include_router(models.router)
     app.include_router(transcribe.router)
     app.include_router(translate.router)
     app.include_router(segments.router)

@@ -14,6 +14,7 @@ TranslationDirection = Literal["ko->en", "en->ko"]
 TranslationEngine = Literal["local", "api"]
 ExportFormat = Literal["srt", "vtt", "json"]
 QualityFlag = Literal["good", "check"]
+ProgressStage = Literal["downloading_model", "processing"]
 
 
 class Segment(BaseModel):
@@ -37,6 +38,7 @@ class Project(BaseModel):
     whisper_model: str | None = None
     error: str | None = None
     progress: float | None = None
+    stage: ProgressStage | None = None
     segments: list[Segment] = Field(default_factory=list)
 
 
@@ -82,3 +84,8 @@ class ReviewDiffEntry(BaseModel):
 class ReviewImportResult(BaseModel):
     diffs: list[ReviewDiffEntry] = Field(default_factory=list)
     unknown_segment_ids: list[str] = Field(default_factory=list)
+
+
+class ModelStatus(BaseModel):
+    whisper: dict[str, bool] = Field(default_factory=dict)
+    translation: dict[str, bool] = Field(default_factory=dict)

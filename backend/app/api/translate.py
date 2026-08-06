@@ -6,7 +6,7 @@ from app.api.deps import get_store
 from app.core.config import get_settings
 from app.models.schemas import Project, TranslateRequest
 from app.services import translation_service
-from app.services.progress_reporter import make_progress_reporter
+from app.services.progress_reporter import make_progress_reporter, make_stage_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 
 router = APIRouter(prefix="/projects", tags=["translate"])
@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 def _run_translation(project_id: str, request: TranslateRequest, store: ProjectStore) -> None:
     project = store.get(project_id)
     try:
-        translator = translation_service.get_translator(request.engine, get_settings())
+        translator = translation_service.get_translator(
+            request.engine, get_settings(), on_stage=make_stage_reporter(project, store)
+        )
         project.segments = translation_service.translate_segments(
             project.segments,
             direction=request.direction,
@@ -25,10 +27,12 @@ def _run_translation(project_id: str, request: TranslateRequest, store: ProjectS
         )
         project.status = "translated"
         project.progress = 1.0
+        project.stage = None
         project.error = None
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps / network
         logger.exception("Translation failed for project %s", project_id)
         project.status = "error"
+        project.stage = None
         project.error = str(exc)
     store.save(project)
 
@@ -49,6 +53,7 @@ async def translate_project(
 
     project.status = "translating"
     project.progress = 0.0
+    project.stage = None
     project.error = None
     store.save(project)
 

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Project, TranslationDirection, TranslationEngine } from '../api/types'
-import { translateProject } from '../api/client'
+import { getModelStatus, translateProject } from '../api/client'
 
 type Props = {
   project: Project
@@ -11,9 +11,26 @@ export function TranslationPanel({ project, onStarted }: Props) {
   const [direction, setDirection] = useState<TranslationDirection>('en->ko')
   const [engine, setEngine] = useState<TranslationEngine>('local')
   const [error, setError] = useState<string | null>(null)
+  const [translationCacheStatus, setTranslationCacheStatus] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    getModelStatus()
+      .then((status) => {
+        if (!cancelled) setTranslationCacheStatus(status.translation)
+      })
+      .catch(() => {
+        // best-effort only - selectors just skip the download badge on failure
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const hasSegments = project.segments.length > 0
   const isBusy = project.status === 'translating' || project.status === 'transcribing'
+  const isModelCached = translationCacheStatus[direction]
+  const isDownloadingModel = project.status === 'translating' && project.stage === 'downloading_model'
 
   async function handleTranslate() {
     setError(null)
@@ -61,7 +78,22 @@ export function TranslationPanel({ project, onStarted }: Props) {
         </button>
       </div>
       {!hasSegments && <p className="hint-text">먼저 전사를 완료해야 번역할 수 있습니다.</p>}
-      {project.status === 'translating' && (
+      {!isBusy && engine === 'local' && isModelCached === false && (
+        <p className="hint-text">⬇ 이 방향의 번역 모델은 아직 다운로드되지 않았습니다. 번역 시작 시 최초 1회 자동으로 다운로드됩니다.</p>
+      )}
+      {!isBusy && engine === 'local' && isModelCached && (
+        <p className="hint-text">✓ 번역 모델이 이미 다운로드되어 있습니다.</p>
+      )}
+      {project.status === 'translating' && isDownloadingModel && (
+        <div className="progress-block">
+          <div className="progress-bar progress-bar-indeterminate" />
+          <p className="hint-text">
+            번역 모델 다운로드 중입니다 — 인터넷 연결이 필요하며 수 분 정도 걸릴 수 있습니다. (최초
+            1회만 필요)
+          </p>
+        </div>
+      )}
+      {project.status === 'translating' && !isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar">
             <div

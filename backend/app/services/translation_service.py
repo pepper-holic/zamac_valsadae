@@ -65,8 +65,9 @@ class LocalTranslator:
     CTranslate2 model directly instead of re-converting.
     """
 
-    def __init__(self, cache_dir: Path):
+    def __init__(self, cache_dir: Path, on_stage: Callable[[str], None] | None = None):
         self._cache_dir = cache_dir
+        self._on_stage = on_stage
         self._loaded: dict[str, tuple[object, object, str | None]] = {}
 
     def _model_dir(self, direction: TranslationDirection, model_name: str) -> Path:
@@ -75,6 +76,10 @@ class LocalTranslator:
         # silently reuse a stale CTranslate2 conversion of the old model.
         safe_model_name = model_name.replace("/", "__")
         return self._cache_dir / f"{direction.replace('->', '_to_')}__{safe_model_name}"
+
+    def is_cached(self, direction: TranslationDirection) -> bool:
+        config = _LOCAL_MODEL_CONFIGS[direction]
+        return self._model_dir(direction, config.model_name).exists()
 
     def _get_tokenizer_and_translator(self, direction: TranslationDirection):
         if direction not in self._loaded:
@@ -85,6 +90,8 @@ class LocalTranslator:
             config = _LOCAL_MODEL_CONFIGS[direction]
             model_dir = self._model_dir(direction, config.model_name)
             if not model_dir.exists():
+                if self._on_stage is not None:
+                    self._on_stage("downloading_model")
                 TransformersConverter(config.model_name).convert(
                     str(model_dir), quantization="int8"
                 )
@@ -93,6 +100,8 @@ class LocalTranslator:
             tokenizer = AutoTokenizer.from_pretrained(config.model_name, **tokenizer_kwargs)
             ct2_translator = ctranslate2.Translator(str(model_dir))
             self._loaded[direction] = (tokenizer, ct2_translator, config.target_prefix)
+            if self._on_stage is not None:
+                self._on_stage("processing")
         return self._loaded[direction]
 
     def translate(self, texts: list[str], direction: TranslationDirection) -> list[str]:
@@ -178,9 +187,11 @@ def _parse_numbered_lines(content: str, expected_count: int) -> list[str]:
     return parsed
 
 
-def get_translator(engine: str, settings: Settings) -> Translator:
+def get_translator(
+    engine: str, settings: Settings, on_stage: Callable[[str], None] | None = None
+) -> Translator:
     if engine == "local":
-        return LocalTranslator(cache_dir=settings.ct2_model_cache_dir)
+        return LocalTranslator(cache_dir=settings.ct2_model_cache_dir, on_stage=on_stage)
     if engine == "api":
         if not settings.translation_api_key:
             raise ValueError("API 번역을 사용하려면 TRANSLATION_API_KEY 설정이 필요합니다.")

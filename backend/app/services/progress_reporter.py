@@ -23,3 +23,12 @@ def make_progress_reporter(project: Project, store: ProjectStore) -> Callable[[f
         store.save(project)
 
     return on_progress
+
+
+def make_stage_reporter(project: Project, store: ProjectStore) -> Callable[[str], None]:
+    def on_stage(stage: str) -> None:
+        project.stage = stage
+        project.progress = None if stage == "downloading_model" else 0.0
+        store.save(project)
+
+    return on_stage

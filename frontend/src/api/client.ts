@@ -1,5 +1,6 @@
 import type {
   ExportFormat,
+  ModelStatus,
   Project,
   ReviewImportResult,
   Segment,
@@ -40,6 +41,11 @@ export async function getProject(projectId: string): Promise<Project> {
 
 export function mediaUrl(projectId: string): string {
   return `${API_BASE}/projects/${projectId}/media`
+}
+
+export async function getModelStatus(): Promise<ModelStatus> {
+  const response = await fetch(`${API_BASE}/models/status`)
+  return parseOrThrow<ModelStatus>(response)
 }
 
 export async function transcribeProject(projectId: string, model: string): Promise<Project> {

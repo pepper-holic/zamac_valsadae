@@ -129,6 +129,43 @@ def test_transcribe_marks_error_status_on_failure(client, monkeypatch):
     assert "model exploded" in project["error"]
 
 
+def test_transcribe_reports_downloading_model_stage(client, monkeypatch):
+    created = _upload_project(client)
+
+    def fake_transcribe(media_path, model_size, on_progress=None, on_stage=None, **kwargs):
+        if on_stage:
+            on_stage("downloading_model")
+        return [Segment(id="s1", start=0.0, end=1.0, text="hello")]
+
+    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
+
+    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+
+    project = client.get(f"/projects/{created['id']}").json()
+    # stage is cleared once the background task finishes successfully
+    assert project["status"] == "transcribed"
+    assert project["stage"] is None
+
+
+def test_models_status_reports_uncached_models(client):
+    response = client.get("/models/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body["whisper"]) == {
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large",
+        "large-v2",
+        "large-v3",
+    }
+    assert set(body["translation"]) == {"ko->en", "en->ko"}
+    assert all(isinstance(cached, bool) for cached in body["whisper"].values())
+    assert all(isinstance(cached, bool) for cached in body["translation"].values())
+
+
 def test_translate_requires_existing_segments(client):
     created = _upload_project(client)
 
