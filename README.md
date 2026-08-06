@@ -107,7 +107,9 @@ python -m pytest
 |---|---|
 | `TRANSLATION_API_KEY` | 설정 시 번역 엔진에서 "API" 옵션 사용 가능 (OpenAI 호환 chat completions) |
 | `TRANSLATION_API_BASE_URL` | 기본값 `https://api.openai.com/v1`. 호환 엔드포인트로 교체 가능 |
-| `APP_DATA_DIR` | 업로드/프로젝트/CTranslate2 모델 캐시 저장 위치. 기본값: 프로젝트 루트의 `data/` |
+| `APP_DATA_DIR` | 업로드/프로젝트/모델 캐시 저장 위치. 기본값: 프로젝트 루트의 `data/` |
+| `CT2_MODEL_CACHE_DIR` | 번역(CTranslate2) 모델 캐시 위치. 기본값: `data/ct2models/` |
+| `WHISPER_MODEL_CACHE_DIR` | Whisper 음성 인식 모델 캐시 위치. 기본값: `data/whisper_models/` (프로젝트 로컬 — 사용자 홈 폴더가 아님) |
 | `VITE_API_BASE_URL` | 프론트엔드 개발 환경에서 사용할 백엔드 URL. `frontend/.env.development`에서 관리됩니다. |
 
 ## 사용 흐름 요약

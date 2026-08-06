@@ -1,4 +1,5 @@
 import contextlib
+import os
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -41,15 +42,19 @@ class WhisperModel(Protocol):
     def transcribe(self, audio_path: str) -> dict: ...
 
 
-def is_model_cached(model_size: str) -> bool:
+def _default_download_root() -> Path:
+    from app.core.config import get_settings
+
+    return get_settings().whisper_model_cache_dir
+
+
+def is_model_cached(model_size: str, download_root: Path | None = None) -> bool:
     """Whether the given Whisper checkpoint has already been downloaded.
 
-    Mirrors whisper's own default download location/filename logic (via its
-    `_MODELS` URL table) instead of hardcoding it, so this stays correct if
-    whisper changes its naming scheme in a future version.
+    Mirrors whisper's own download filename logic (via its `_MODELS` URL
+    table) instead of hardcoding it, so this stays correct if whisper
+    changes its naming scheme in a future version.
     """
-    import os
-
     import whisper
 
     if model_size in _MODEL_CACHE:
@@ -57,22 +62,23 @@ def is_model_cached(model_size: str) -> bool:
     url = whisper._MODELS.get(model_size)
     if url is None:
         return False
-    download_root = os.path.join(
-        os.getenv("XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache")),
-        "whisper",
-    )
-    return os.path.isfile(os.path.join(download_root, os.path.basename(url)))
+    root = download_root if download_root is not None else _default_download_root()
+    return (root / os.path.basename(url)).is_file()
 
 
 def _get_model(
-    model_size: str, on_stage: Callable[[str], None] | None = None
+    model_size: str,
+    on_stage: Callable[[str], None] | None = None,
+    download_root: Path | None = None,
 ) -> WhisperModel:
     import whisper
 
     if model_size not in _MODEL_CACHE:
-        if on_stage is not None and not is_model_cached(model_size):
+        root = download_root if download_root is not None else _default_download_root()
+        if on_stage is not None and not is_model_cached(model_size, download_root=root):
             on_stage("downloading_model")
-        _MODEL_CACHE[model_size] = whisper.load_model(model_size)
+        root.mkdir(parents=True, exist_ok=True)
+        _MODEL_CACHE[model_size] = whisper.load_model(model_size, download_root=str(root))
         if on_stage is not None:
             on_stage("processing")
     return _MODEL_CACHE[model_size]
@@ -109,8 +115,9 @@ def transcribe(
     model: WhisperModel | None = None,
     on_progress: ProgressCallback | None = None,
     on_stage: Callable[[str], None] | None = None,
+    download_root: Path | None = None,
 ) -> list[Segment]:
-    active_model = model or _get_model(model_size, on_stage=on_stage)
+    active_model = model or _get_model(model_size, on_stage=on_stage, download_root=download_root)
 
     if on_progress is not None and model is None:
         # verbose=False (rather than the default None) is required for whisper's

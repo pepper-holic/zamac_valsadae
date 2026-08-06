@@ -8,6 +8,9 @@ PROJECTS_DIR = DATA_DIR / "projects"
 CT2_MODEL_CACHE_DIR = Path(
     os.environ.get("CT2_MODEL_CACHE_DIR", DATA_DIR / "ct2models")
 )
+WHISPER_MODEL_CACHE_DIR = Path(
+    os.environ.get("WHISPER_MODEL_CACHE_DIR", DATA_DIR / "whisper_models")
+)
 
 WHISPER_MODEL_SIZES = (
     "tiny",
@@ -25,6 +28,7 @@ class Settings:
     data_dir: Path = DATA_DIR
     projects_dir: Path = PROJECTS_DIR
     ct2_model_cache_dir: Path = CT2_MODEL_CACHE_DIR
+    whisper_model_cache_dir: Path = WHISPER_MODEL_CACHE_DIR
     translation_api_key: str | None = os.environ.get("TRANSLATION_API_KEY")
     translation_api_base_url: str | None = os.environ.get("TRANSLATION_API_BASE_URL")
 

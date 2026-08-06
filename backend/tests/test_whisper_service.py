@@ -116,17 +116,31 @@ def test_is_model_cached_false_for_unknown_size():
     assert is_model_cached("not-a-real-model-size") is False
 
 
-def test_is_model_cached_true_when_file_present_on_disk(tmp_path, monkeypatch):
+def test_is_model_cached_true_when_file_present_in_download_root(tmp_path):
     import whisper
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     model_url = next(iter(whisper._MODELS.values()))
     model_size = next(iter(whisper._MODELS.keys()))
-    cache_dir = tmp_path / "whisper"
-    cache_dir.mkdir()
-    (cache_dir / model_url.split("/")[-1]).write_bytes(b"fake-checkpoint")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / model_url.split("/")[-1]).write_bytes(b"fake-checkpoint")
 
-    assert is_model_cached(model_size) is True
+    assert is_model_cached(model_size, download_root=tmp_path) is True
+
+
+def test_is_model_cached_false_when_download_root_empty(tmp_path):
+    import whisper
+
+    model_size = next(iter(whisper._MODELS.keys()))
+
+    assert is_model_cached(model_size, download_root=tmp_path) is False
+
+
+def test_is_model_cached_defaults_to_project_local_cache_dir(monkeypatch, tmp_path):
+    from app.core import config
+
+    monkeypatch.setattr(config, "get_settings", lambda: config.Settings(whisper_model_cache_dir=tmp_path))
+
+    assert is_model_cached("not-a-real-model-size") is False
 
 
 def test_transcribe_with_injected_model_ignores_on_progress():

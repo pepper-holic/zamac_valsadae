@@ -63,6 +63,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Failed to install pip into the embedded Python." }
     }
 
+    # get-pip.py no longer bundles setuptools/wheel by default. Some backend
+    # dependencies (e.g. openai-whisper) still ship as legacy sdists that
+    # need setuptools present to build, so make sure it's there. Cheap and
+    # idempotent, so this always runs (also fixes runtimes installed before
+    # this check existed).
+    Write-Host "Ensuring setuptools/wheel are available in the embedded Python..."
+    & $PythonExe -m pip install --no-warn-script-location --upgrade setuptools wheel
+    if ($LASTEXITCODE -ne 0) { throw "Failed to install setuptools/wheel into the embedded Python." }
+
     # --- Embedded Node.js ---
     if (Test-Path $NodeExe) {
         Write-Step "[2/5] Embedded Node.js already installed."
