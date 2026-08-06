@@ -8,6 +8,8 @@
 - 프론트엔드: React + TypeScript + Vite
 - 로컬에서 전체 전사/번역/편집/내보내기/검수 워크플로우를 처리합니다.
 - `data/`에 모델 캐시와 프로젝트 데이터를 저장하며, 실행 시 자동으로 필요한 모델을 변환하고 캐시합니다.
+- Whisper/번역 모델은 각 방향·크기별로 최초 1회만 자동 다운로드되며, 전사/번역 화면에 다운로드 여부와
+  진행 상황("모델 다운로드 중" / "처리 중")이 표시됩니다.
 
 ## 빠른 시작 (Windows 사용자를 위한 권장 방법 — 설치형 포터블 패키지)
 
@@ -57,7 +59,7 @@ npm run dev
 
 - `backend/` — FastAPI 앱, 서비스 로직, 모델 스키마, 테스트
 - `frontend/` — React 애플리케이션, 타입 정의, 컴포넌트
-- `data/` — CTranslate2 모델 캐시(`ct2models/`) 및 프로젝트 저장소(`projects/`)
+- `data/` — 번역 모델 캐시(`ct2models/`), Whisper 모델 캐시(`whisper_models/`), 프로젝트 저장소(`projects/`)
 - `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
 - `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
 - `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
@@ -79,6 +81,14 @@ npm run dev
 3. 번역 실행
 4. 세그먼트 편집 및 AI 검수 결과 반영
 5. SRT/VTT/JSON 내보내기
+
+### 모델 다운로드 상태 표시
+
+- `GET /models/status` — Whisper 모델 크기별, 번역 방향별로 이미 다운로드되어 있는지 여부를 반환합니다.
+  프론트엔드는 전사/번역 시작 전에 이 값을 조회해 "✓ 다운로드됨" / "⬇ 다운로드 필요" 배지를 보여줍니다.
+- 전사/번역 실행 중에는 `Project.stage` 값(`downloading_model` | `processing`)에 따라 진행 표시가
+  달라집니다. 모델을 처음 받는 동안은 불확정(인디터미네이트) 진행바가, 실제 처리 중에는 퍼센트 진행바가
+  표시됩니다.
 
 ### 내부 운영 규칙
 
@@ -125,8 +135,18 @@ python -m pytest
 5. AI 검수 결과 반영
 6. 내보내기
 
-## 번역 모델 참고
+## 모델 캐시 참고
+
+모든 모델은 사용자 홈 폴더가 아닌 이 프로젝트의 `data/` 아래에만 저장됩니다 — `data/` 폴더를
+지우면 모델 캐시까지 함께 깨끗이 삭제됩니다.
+
+### 번역 모델
 
 - **한→영**: `Helsinki-NLP/opus-mt-ko-en`
 - **영→한**: `facebook/nllb-200-distilled-600M` (언어 태그 `kor_Hang` 사용)
 - 최초 실행 시 CTranslate2 int8 포맷으로 변환 후 `data/ct2models/`에 캐시됩니다.
+
+### Whisper 모델
+
+- `tiny` ~ `large-v3` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
+- `data/whisper_models/`에 캐시됩니다 (`WHISPER_MODEL_CACHE_DIR`로 위치 변경 가능).
