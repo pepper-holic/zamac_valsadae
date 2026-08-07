@@ -89,6 +89,11 @@ export async function updateSegment(
   return parseOrThrow<Segment>(response)
 }
 
+export async function cancelProject(projectId: string): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/cancel`, { method: 'POST' })
+  return parseOrThrow<Project>(response)
+}
+
 export async function deleteProject(projectId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/projects/${projectId}`, { method: 'DELETE' })
   if (!response.ok) {

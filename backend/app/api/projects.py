@@ -3,11 +3,14 @@ from fastapi.responses import FileResponse
 
 from app.api.deps import get_store
 from app.models.schemas import Project
+from app.services import cancellation
 from app.services.project_store import (
     ProjectCorruptedError,
     ProjectNotFoundError,
     ProjectStore,
 )
+
+_CANCELLABLE_STATUSES = ("transcribing", "translating")
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,6 +45,18 @@ async def delete_project(project_id: str, store: ProjectStore = Depends(get_stor
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
     return Response(status_code=204)
+
+
+@router.post("/{project_id}/cancel", response_model=Project)
+async def cancel_project_operation(project_id: str, store: ProjectStore = Depends(get_store)) -> Project:
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    if project.status not in _CANCELLABLE_STATUSES:
+        raise HTTPException(status_code=400, detail="현재 진행 중인 작업이 없습니다.")
+    cancellation.request_cancel(project_id)
+    return project
 
 
 @router.get("/{project_id}/media")

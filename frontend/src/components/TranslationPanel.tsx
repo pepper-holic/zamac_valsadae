@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Project, TranslationDirection, TranslationEngine } from '../api/types'
-import { getModelStatus, translateProject } from '../api/client'
+import { cancelProject, getModelStatus, translateProject } from '../api/client'
 
 type Props = {
   project: Project
@@ -42,6 +42,16 @@ export function TranslationPanel({ project, onStarted }: Props) {
     }
   }
 
+  async function handleCancel() {
+    setError(null)
+    try {
+      const updated = await cancelProject(project.id)
+      onStarted(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <section className="panel">
       <h2>2. 번역</h2>
@@ -76,6 +86,15 @@ export function TranslationPanel({ project, onStarted }: Props) {
         >
           {project.status === 'translating' ? '번역 중...' : '번역 시작'}
         </button>
+        {project.status === 'translating' && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            data-tip="진행 중인 번역을 중단합니다."
+          >
+            취소
+          </button>
+        )}
       </div>
       {!hasSegments && <p className="hint-text">먼저 전사를 완료해야 번역할 수 있습니다.</p>}
       {!isBusy && engine === 'local' && isModelCached === false && (

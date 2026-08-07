@@ -4,6 +4,7 @@ from app.core.config import Settings
 from app.models.schemas import Segment
 from app.services.translation_service import (
     LocalTranslator,
+    TranslationCancelled,
     _already_in_target_language,
     get_translator,
     translate_segments,
@@ -117,6 +118,39 @@ def test_translate_segments_empty_list_returns_empty():
     result = translate_segments([], direction="ko->en", translator=FakeTranslator({}))
 
     assert result == []
+
+
+def test_translate_segments_raises_when_cancelled_before_first_batch():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="안녕하세요")]
+    translator = FakeTranslator({"안녕하세요": "Hello"})
+
+    with pytest.raises(TranslationCancelled):
+        translate_segments(
+            segments, direction="ko->en", translator=translator, should_cancel=lambda: True
+        )
+
+
+def test_translate_segments_stops_between_batches_when_cancelled():
+    segments = [
+        Segment(id=str(i), start=float(i), end=float(i + 1), text=f"문장{i}") for i in range(5)
+    ]
+    translator = FakeTranslator({f"문장{i}": f"trans{i}" for i in range(5)})
+    calls = {"n": 0}
+
+    def should_cancel() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 1  # let the first batch through, cancel before the second
+
+    with pytest.raises(TranslationCancelled):
+        translate_segments(
+            segments,
+            direction="ko->en",
+            translator=translator,
+            batch_size=2,
+            should_cancel=should_cancel,
+        )
+
+    assert translator.batches == [["문장0", "문장1"]]
 
 
 class FakeScoringTranslator:

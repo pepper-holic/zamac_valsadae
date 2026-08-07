@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Project } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
-import { getModelStatus, transcribeProject } from '../api/client'
+import { cancelProject, getModelStatus, transcribeProject } from '../api/client'
 
 type Props = {
   project: Project
@@ -52,6 +52,16 @@ export function TranscribePanel({ project, onStarted }: Props) {
     }
   }
 
+  async function handleCancel() {
+    setError(null)
+    try {
+      const updated = await cancelProject(project.id)
+      onStarted(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <section className="panel">
       <h2>1. 전사 (Whisper)</h2>
@@ -78,6 +88,15 @@ export function TranscribePanel({ project, onStarted }: Props) {
         >
           {project.status === 'transcribing' ? '전사 중...' : '전사 시작'}
         </button>
+        {project.status === 'transcribing' && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            data-tip="진행 중인 전사를 중단합니다."
+          >
+            취소
+          </button>
+        )}
       </div>
       <p className="hint-text">{MODEL_NOTES[model]}</p>
       {!isBusy(project.status) && whisperCacheStatus[model] === false && (

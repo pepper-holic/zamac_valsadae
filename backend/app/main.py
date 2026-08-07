@@ -5,8 +5,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import export, models, projects, review, segments, transcribe, translate
+from app.api.deps import get_store
+from app.services.project_store import ProjectStore
 
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+_INTERRUPTED_STATUSES = ("transcribing", "translating")
+_INTERRUPTED_MESSAGE = "서버가 재시작되어 작업이 중단되었습니다. 다시 시도해주세요."
+
+
+def recover_interrupted_projects(store: ProjectStore) -> None:
+    """Background tasks (transcribe/translate) run in-process, so a server
+    restart silently kills whatever was running - the project's status stays
+    stuck at "transcribing"/"translating" forever with no process left to
+    finish it. Mark those as failed on startup so the user sees a clear
+    error and can retry, instead of a progress bar that never moves again.
+    """
+    for project in store.list():
+        if project.status in _INTERRUPTED_STATUSES:
+            project.status = "error"
+            project.stage = None
+            project.progress = None
+            project.error = _INTERRUPTED_MESSAGE
+            store.save(project)
 
 
 def create_app() -> FastAPI:
@@ -18,6 +39,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def _recover_interrupted_projects_on_startup() -> None:
+        recover_interrupted_projects(get_store())
 
     app.include_router(projects.router)
     app.include_router(models.router)

@@ -147,6 +147,58 @@ def test_transcribe_reports_downloading_model_stage(client, monkeypatch):
     assert project["stage"] is None
 
 
+def test_transcribe_stopped_via_should_cancel_marks_error_with_cancel_message(client, monkeypatch):
+    created = _upload_project(client)
+
+    def fake_transcribe(media_path, model_size, should_cancel=None, **kwargs):
+        from app.services import cancellation
+        from app.services.whisper_service import TranscriptionCancelled
+
+        # simulates an external POST /cancel arriving while transcribe() is running
+        cancellation.request_cancel(created["id"])
+        if should_cancel and should_cancel():
+            raise TranscriptionCancelled("취소")
+        return []
+
+    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
+
+    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+
+    project = client.get(f"/projects/{created['id']}").json()
+    assert project["status"] == "error"
+    assert "취소" in project["error"]
+    assert project["progress"] is None
+
+
+def test_cancel_endpoint_accepts_busy_project(client, store):
+    created = _upload_project(client)
+    project = store.get(created["id"])
+    project.status = "transcribing"
+    store.save(project)
+
+    response = client.post(f"/projects/{created['id']}/cancel")
+
+    assert response.status_code == 200
+    from app.services import cancellation
+
+    assert cancellation.is_cancelled(created["id"]) is True
+    cancellation.clear_cancel(created["id"])
+
+
+def test_cancel_endpoint_rejects_non_busy_project(client):
+    created = _upload_project(client)
+
+    response = client.post(f"/projects/{created['id']}/cancel")
+
+    assert response.status_code == 400
+
+
+def test_cancel_endpoint_missing_project_returns_404(client):
+    response = client.post("/projects/does-not-exist/cancel")
+
+    assert response.status_code == 404
+
+
 def test_models_status_reports_uncached_models(client):
     response = client.get("/models/status")
 

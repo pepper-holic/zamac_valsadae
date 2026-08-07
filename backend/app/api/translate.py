@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from app.api.deps import get_store
 from app.core.config import get_settings
 from app.models.schemas import Project, TranslateRequest
-from app.services import translation_service
+from app.services import cancellation, translation_service
 from app.services.progress_reporter import make_progress_reporter, make_stage_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 
@@ -24,16 +24,24 @@ def _run_translation(project_id: str, request: TranslateRequest, store: ProjectS
             direction=request.direction,
             translator=translator,
             on_progress=make_progress_reporter(project, store),
+            should_cancel=lambda: cancellation.is_cancelled(project_id),
         )
         project.status = "translated"
         project.progress = 1.0
         project.stage = None
         project.error = None
+    except translation_service.TranslationCancelled:
+        project.status = "error"
+        project.stage = None
+        project.progress = None
+        project.error = "사용자가 번역을 취소했습니다."
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps / network
         logger.exception("Translation failed for project %s", project_id)
         project.status = "error"
         project.stage = None
         project.error = str(exc)
+    finally:
+        cancellation.clear_cancel(project_id)
     store.save(project)
 
 
@@ -51,6 +59,7 @@ async def translate_project(
     if not project.segments:
         raise HTTPException(status_code=400, detail="번역할 세그먼트가 없습니다. 먼저 전사를 실행하세요.")
 
+    cancellation.clear_cancel(project_id)
     project.status = "translating"
     project.progress = 0.0
     project.stage = None

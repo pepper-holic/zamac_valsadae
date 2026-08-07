@@ -204,12 +204,17 @@ _LOW_SCORE_STDEV_MULTIPLIER = 1.5
 _MIN_SEGMENTS_FOR_RELATIVE_QUALITY = 3
 
 
+class TranslationCancelled(Exception):
+    """Raised mid-translate when the caller's should_cancel() reports True."""
+
+
 def translate_segments(
     segments: list[Segment],
     direction: TranslationDirection,
     translator: Translator,
     on_progress: Callable[[float], None] | None = None,
     batch_size: int = 8,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[Segment]:
     if not segments:
         return []
@@ -236,6 +241,8 @@ def translate_segments(
     scores_by_index: dict[int, float | None] = {}
 
     for start in range(0, len(pending_segments), batch_size):
+        if should_cancel is not None and should_cancel():
+            raise TranslationCancelled("번역이 취소되었습니다.")
         batch = pending_segments[start : start + batch_size]
         batch_indices = pending_indices[start : start + batch_size]
         batch_texts = [segment.text for segment in batch]
