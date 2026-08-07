@@ -64,10 +64,9 @@ try {
     }
 
     # get-pip.py no longer bundles setuptools/wheel by default. Some backend
-    # dependencies (e.g. openai-whisper) still ship as legacy sdists that
-    # need setuptools present to build, so make sure it's there. Cheap and
-    # idempotent, so this always runs (also fixes runtimes installed before
-    # this check existed).
+    # dependencies still ship as legacy sdists that need setuptools present
+    # to build, so make sure it's there. Cheap and idempotent, so this always
+    # runs (also fixes runtimes installed before this check existed).
     Write-Host "Ensuring setuptools/wheel are available in the embedded Python..."
     & $PythonExe -m pip install --no-warn-script-location --upgrade setuptools wheel
     if ($LASTEXITCODE -ne 0) { throw "Failed to install setuptools/wheel into the embedded Python." }
@@ -98,14 +97,35 @@ try {
 
     Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
 
-    # --- Backend Python packages (torch, whisper, ctranslate2 - several GB,
-    # first run can take a while). Whisper/translation model weights are
-    # NOT downloaded here - they are fetched lazily on first transcribe/
-    # translate, with progress shown in the app UI. ---
-    Write-Step "[4/5] Installing backend Python packages (several GB, first run can take a while)..."
-    & $PythonExe -m pip install --upgrade pip
-    & $PythonExe -m pip install -r (Join-Path $RootDir "backend\requirements.txt")
-    if ($LASTEXITCODE -ne 0) { throw "Backend package install failed." }
+    # --- Backend Python packages (faster-whisper, ctranslate2, transformers -
+    # a GB or so, first run can take a while). Whisper/translation model
+    # weights are NOT downloaded here - they are fetched lazily on first
+    # transcribe/translate, with progress shown in the app UI. ---
+    #
+    # --no-cache-dir + a short PIP_TMPDIR avoid Windows' 260-char MAX_PATH
+    # install failures: pip's cache/build dirs default to nested paths under
+    # this repo (already long once cloned into e.g. Documents\...), and
+    # ctranslate2/transformers ship deeply-nested wheel contents that can
+    # exceed the limit before ever reaching the destination site-packages.
+    Write-Step "[4/5] Installing backend Python packages (about 1-2 GB, first run can take a while)..."
+    $PipTmpDir = "C:\ct-pip-tmp"
+    New-Item -ItemType Directory -Force -Path $PipTmpDir | Out-Null
+    $OriginalTmpDir = $env:TMPDIR
+    $OriginalTemp = $env:TEMP
+    $OriginalTmp = $env:TMP
+    $env:TMPDIR = $PipTmpDir
+    $env:TEMP = $PipTmpDir
+    $env:TMP = $PipTmpDir
+    try {
+        & $PythonExe -m pip install --upgrade pip
+        & $PythonExe -m pip install --no-cache-dir -r (Join-Path $RootDir "backend\requirements.txt")
+        if ($LASTEXITCODE -ne 0) { throw "Backend package install failed." }
+    } finally {
+        $env:TMPDIR = $OriginalTmpDir
+        $env:TEMP = $OriginalTemp
+        $env:TMP = $OriginalTmp
+        Remove-Item -Path $PipTmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
     # --- Frontend build ---
     Write-Step "[5/5] Building the frontend..."
