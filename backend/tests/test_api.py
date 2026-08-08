@@ -458,6 +458,56 @@ def test_update_segment_patches_text(client, monkeypatch):
     assert response.json()["text"] == "수정된 원문"
 
 
+def test_update_segment_clears_words_when_text_changes(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(
+                id="s1",
+                start=0.0,
+                end=1.0,
+                text="원문",
+                words=[{"text": "원문", "start": 0.0, "end": 1.0}],
+            )
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.patch(_segments_url(ctx, "/s1"), json={"text": "수정된 원문"})
+
+    assert response.status_code == 200
+    assert response.json()["words"] == []
+
+
+def test_update_segment_keeps_words_when_text_unchanged(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(
+                id="s1",
+                start=0.0,
+                end=1.0,
+                text="원문",
+                words=[{"text": "원문", "start": 0.0, "end": 1.0}],
+            )
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.patch(_segments_url(ctx, "/s1"), json={"reviewed": True})
+
+    assert response.status_code == 200
+    assert response.json()["words"] == [{"text": "원문", "start": 0.0, "end": 1.0}]
+
+
 def test_update_missing_segment_returns_404(client):
     ctx = _create_project_with_item(client)
 

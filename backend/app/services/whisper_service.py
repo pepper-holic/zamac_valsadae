@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from app.core.config import WHISPER_MODEL_SIZES
-from app.models.schemas import Segment
+from app.models.schemas import Segment, Word
 
 _MODEL_CACHE: dict[str, object] = {}
 
@@ -56,6 +56,16 @@ def _assess_transcription_quality(raw_segment: object) -> tuple[str, str | None]
     if reasons:
         return "check", " / ".join(reasons)
     return "good", None
+
+
+def _extract_words(raw_segment: object) -> list[Word]:
+    raw_words = getattr(raw_segment, "words", None)
+    if not raw_words:
+        return []
+    return [
+        Word(text=raw_word.word.strip(), start=float(raw_word.start), end=float(raw_word.end))
+        for raw_word in raw_words
+    ]
 
 
 class WhisperModel(Protocol):
@@ -152,6 +162,7 @@ def transcribe(
                 text=raw_segment.text.strip(),
                 transcription_quality=quality,
                 transcription_quality_reason=reason,
+                words=_extract_words(raw_segment),
             )
         )
     return segments

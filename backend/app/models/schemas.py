@@ -19,6 +19,12 @@ QualityFlag = Literal["good", "check"]
 ProgressStage = Literal["downloading_model", "processing", "diarizing", "rendering"]
 
 
+class Word(BaseModel):
+    text: str
+    start: float
+    end: float
+
+
 class Segment(BaseModel):
     id: str
     start: float = 0.0  # 기본값 설정으로 누락 시 에러 방지
@@ -33,6 +39,7 @@ class Segment(BaseModel):
     readability_flag: QualityFlag | None = None
     readability_reason: str | None = None
     reviewed: bool = False
+    words: list[Word] = Field(default_factory=list)
 
 
 class SubtitleStyle(BaseModel):

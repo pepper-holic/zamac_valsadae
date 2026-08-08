@@ -88,7 +88,13 @@ def find_replace(
     for segment in segments:
         current = getattr(segment, field)
         if current and find in current:
-            updated.append(segment.model_copy(update={field: current.replace(find, replace)}))
+            new_value = current.replace(find, replace)
+            change = {field: new_value}
+            if field == "text":
+                # 원문이 바뀌면 단어별 타임스탬프 정렬이 깨지므로 비운다
+                # (부정확한 카라오케 강조보다 강조 없음이 안전).
+                change["words"] = []
+            updated.append(segment.model_copy(update=change))
         else:
             updated.append(segment)
     return updated

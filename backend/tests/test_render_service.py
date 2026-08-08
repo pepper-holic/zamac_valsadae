@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models.schemas import Segment, SubtitleStyle
+from app.models.schemas import Segment, SubtitleStyle, Word
 from app.services import render_service
 
 
@@ -82,6 +82,46 @@ def test_build_ass_karaoke_splits_text_into_k_tagged_words():
     )
 
     assert ass.count("\\k") == 3
+
+
+def test_build_ass_karaoke_uses_real_word_durations_when_available():
+    segment = _segment(text="one two", start=0.0, end=3.0).model_copy(
+        update={
+            "words": [
+                Word(text="one", start=0.0, end=1.0),
+                Word(text="two", start=1.0, end=3.0),
+            ]
+        }
+    )
+
+    ass = render_service.build_ass([segment], SubtitleStyle(karaoke_highlight=True))
+
+    assert "{\\k100}one" in ass
+    assert "{\\k200}two" in ass
+
+
+def test_build_ass_karaoke_falls_back_to_equal_split_when_words_absent():
+    ass = render_service.build_ass(
+        [_segment(text="one two", start=0.0, end=2.0)], SubtitleStyle(karaoke_highlight=True)
+    )
+
+    assert "{\\k100}one" in ass
+    assert "{\\k100}two" in ass
+
+
+def test_build_ass_karaoke_ignores_words_when_rendering_translation_text():
+    segment = _segment(text="hello", start=0.0, end=2.0).model_copy(
+        update={
+            "translation": "안녕 하세요",
+            "words": [Word(text="hello", start=0.0, end=2.0)],
+        }
+    )
+
+    ass = render_service.build_ass(
+        [segment], SubtitleStyle(karaoke_highlight=True), use_translation=True
+    )
+
+    assert ass.count("\\k") == 2
 
 
 def test_hex_to_ass_color_converts_rgb_to_bgr_with_alpha():

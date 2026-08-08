@@ -16,6 +16,12 @@ export type QualityFlag = 'good' | 'check'
 
 export type ProgressStage = 'downloading_model' | 'processing' | 'diarizing' | 'rendering'
 
+export interface Word {
+  text: string
+  start: number
+  end: number
+}
+
 export interface Segment {
   id: string
   start: number
@@ -30,6 +36,7 @@ export interface Segment {
   readability_flag: QualityFlag | null
   readability_reason: string | null
   reviewed: boolean
+  words: Word[]
 }
 
 export interface MediaItem {

@@ -316,7 +316,7 @@ Vrew / Subtitle Edit / Aegisub / Descript / CapCut·VEED·Kapwing / Maestra·Hap
 |---|---|---|---|---|---|
 | **19** | **Whisper `large-v3-turbo` 모델 옵션 추가 (최우선)** | 높음 | **매우 낮음** | faster-whisper/CTranslate2 자체 지원 | [x] 완료 (2026-08-09) |
 | 20 | 필러워드/무음 구간 자동 감지·일괄 제거 | 높음 | 낮음 | Vrew, Descript | [x] 완료 (2026-08-09) |
-| 21 | 단어별(word-level) 타임스탬프 저장 | 중간(기반 작업) | 중간 | Vrew, Aegisub 카라오케 | [ ] 미착수 |
+| 21 | 단어별(word-level) 타임스탬프 저장 | 중간(기반 작업) | 중간 | Vrew, Aegisub 카라오케 | [x] 완료 (2026-08-09) |
 | 22 | 텍스트 삭제 시 영상도 함께 잘리는 컷 편집 | 높음(차별화) | 높음 | Vrew, Descript | [ ] 미착수 |
 
 ### 19. Whisper `large-v3-turbo` 모델 옵션 추가 (최우선)

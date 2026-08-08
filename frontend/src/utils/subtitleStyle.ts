@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { Segment, SubtitleStyle } from '../api/types'
+import type { Segment, SubtitleStyle, Word } from '../api/types'
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = hex.replace('#', '')
@@ -56,11 +56,44 @@ export function subtitleFadeOpacity(
   return 1
 }
 
-// 실제 단어별 타임스탬프는 저장되지 않으므로(전사 시점에만 내부적으로 계산됨),
-// 재생 경과 비율만큼 텍스트 앞부분을 강조하는 방식으로 근사합니다.
-export function karaokeHighlightLength(segment: Segment, currentTime: number, text: string): number {
+// word.text는 앞뒤 공백이 제거된 상태로 저장되므로, 단순히 word 길이를 더하면
+// 단어 사이 공백/구두점만큼 실제 text 위치보다 뒤처집니다. text 안에서 각
+// word의 실제 위치를 순서대로 찾아 그 위치를 기준으로 강조 길이를 계산합니다.
+function karaokeHighlightLengthFromWords(words: Word[], currentTime: number, text: string): number {
+  let searchFrom = 0
+  let highlightEnd = 0
+  for (const word of words) {
+    const wordStart = text.indexOf(word.text, searchFrom)
+    if (wordStart === -1) break
+    const wordEnd = wordStart + word.text.length
+    searchFrom = wordEnd
+
+    if (currentTime >= word.end) {
+      highlightEnd = wordEnd
+      continue
+    }
+    if (currentTime > word.start) {
+      const wordDuration = Math.max(word.end - word.start, 0.001)
+      const ratio = (currentTime - word.start) / wordDuration
+      highlightEnd = wordStart + Math.round(word.text.length * ratio)
+    }
+    break
+  }
+  return Math.min(highlightEnd, text.length)
+}
+
+// 재생 경과 비율만큼 텍스트 앞부분을 강조하는 근사 방식 - 단어별 타임스탬프가
+// 없는 세그먼트(또는 번역문처럼 word 정렬이 없는 텍스트)의 폴백입니다.
+function karaokeHighlightLengthApprox(segment: Segment, currentTime: number, text: string): number {
   const duration = segment.end - segment.start
   if (duration <= 0) return text.length
   const ratio = Math.min(Math.max((currentTime - segment.start) / duration, 0), 1)
   return Math.round(text.length * ratio)
+}
+
+export function karaokeHighlightLength(segment: Segment, currentTime: number, text: string): number {
+  if (segment.words.length > 0 && text === segment.text) {
+    return karaokeHighlightLengthFromWords(segment.words, currentTime, text)
+  }
+  return karaokeHighlightLengthApprox(segment, currentTime, text)
 }

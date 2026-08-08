@@ -1,6 +1,6 @@
 import pytest
 
-from app.models.schemas import Segment
+from app.models.schemas import Segment, Word
 from app.services.segment_edit_service import (
     find_filler_segments,
     find_replace,
@@ -72,6 +72,21 @@ def test_split_segment_single_word_splits_by_character():
     assert second.text != ""
 
 
+def test_split_segment_clears_words_on_both_halves():
+    segment = Segment(
+        id="1",
+        start=0.0,
+        end=10.0,
+        text="one two three four",
+        words=[Word(text="one", start=0.0, end=1.0)],
+    )
+
+    first, second = split_segment(segment, split_at=5.0)
+
+    assert first.words == []
+    assert second.words == []
+
+
 def test_split_segment_recomputes_readability():
     segment = Segment(id="1", start=0.0, end=10.0, text="one two three four")
 
@@ -139,6 +154,17 @@ def test_merge_segments_speaker_none_when_mismatched():
     assert merged.speaker is None
 
 
+def test_merge_segments_clears_words():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text="a", words=[Word(text="a", start=0.0, end=1.0)]),
+        Segment(id="2", start=1.0, end=2.0, text="b"),
+    ]
+
+    merged = merge_segments(segments)
+
+    assert merged.words == []
+
+
 def test_merge_segments_requires_at_least_two():
     with pytest.raises(ValueError):
         merge_segments([Segment(id="1", start=0.0, end=1.0, text="a")])
@@ -178,6 +204,30 @@ def test_find_replace_empty_find_returns_segments_unchanged():
     updated = find_replace(segments, field="text", find="", replace="x")
 
     assert updated[0].text == "hello"
+
+
+def test_find_replace_clears_words_on_changed_text_segments():
+    segments = [
+        Segment(
+            id="1",
+            start=0.0,
+            end=1.0,
+            text="hello world",
+            words=[Word(text="hello", start=0.0, end=0.5)],
+        ),
+        Segment(
+            id="2",
+            start=1.0,
+            end=2.0,
+            text="untouched",
+            words=[Word(text="untouched", start=1.0, end=2.0)],
+        ),
+    ]
+
+    updated = find_replace(segments, field="text", find="world", replace="earth")
+
+    assert updated[0].words == []
+    assert updated[1].words == [Word(text="untouched", start=1.0, end=2.0)]
 
 
 def test_find_replace_does_not_mutate_original_segments():

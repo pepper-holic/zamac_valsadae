@@ -31,7 +31,22 @@ def _alignment_for(position: str) -> int:
     return 8 if position == "top" else 2
 
 
-def _karaoke_text(text: str, duration_seconds: float) -> str:
+def _karaoke_text_from_words(segment: Segment) -> str:
+    parts = []
+    for word in segment.words:
+        word_text = word.text.strip()
+        if not word_text:
+            continue
+        duration_cs = max(round((word.end - word.start) * 100), 1)
+        parts.append(f"{{\\k{duration_cs}}}{word_text} ")
+    return "".join(parts).strip()
+
+
+def _karaoke_text(segment: Segment, text: str, duration_seconds: float) -> str:
+    # 단어별 타임스탬프는 원문(segment.text)에만 대응되므로, 번역문을 렌더링할
+    # 때는 words가 있어도 균등 분할 폴백을 사용한다.
+    if segment.words and text == segment.text:
+        return _karaoke_text_from_words(segment)
     words = text.split()
     if not words:
         return text
@@ -80,7 +95,11 @@ def build_ass(segments: list[Segment], style: SubtitleStyle, use_translation: bo
         override = ""
         if style.fade_in_ms > 0 or style.fade_out_ms > 0:
             override = f"{{\\fad({style.fade_in_ms},{style.fade_out_ms})}}"
-        body = _karaoke_text(text, segment.end - segment.start) if style.karaoke_highlight else text
+        body = (
+            _karaoke_text(segment, text, segment.end - segment.start)
+            if style.karaoke_highlight
+            else text
+        )
         body = body.replace("\n", "\\N")
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{override}{body}")
     return "\n".join(lines) + "\n"

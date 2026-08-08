@@ -13,6 +13,13 @@ from app.services.whisper_service import (
 
 
 @dataclass
+class FakeRawWord:
+    word: str
+    start: float
+    end: float
+
+
+@dataclass
 class FakeRawSegment:
     start: float
     end: float
@@ -20,6 +27,7 @@ class FakeRawSegment:
     no_speech_prob: float | None = None
     avg_logprob: float | None = None
     compression_ratio: float | None = None
+    words: list[FakeRawWord] | None = None
 
 
 class FakeWhisperModel:
@@ -215,6 +223,38 @@ def test_transcribe_stops_between_segments_when_cancelled():
         transcribe(
             Path("video.mp4"), model_size="small", model=fake_model, should_cancel=should_cancel
         )
+
+
+def test_transcribe_maps_raw_words_to_segment_words():
+    fake_model = FakeWhisperModel(
+        [
+            FakeRawSegment(
+                start=0.0,
+                end=1.0,
+                text="안녕 하세요",
+                words=[
+                    FakeRawWord(word="안녕", start=0.0, end=0.4),
+                    FakeRawWord(word="하세요", start=0.4, end=1.0),
+                ],
+            )
+        ]
+    )
+
+    segments = transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert len(segments[0].words) == 2
+    assert segments[0].words[0].text == "안녕"
+    assert segments[0].words[0].start == 0.0
+    assert segments[0].words[0].end == 0.4
+    assert segments[0].words[1].text == "하세요"
+
+
+def test_transcribe_leaves_words_empty_when_raw_segment_has_none():
+    fake_model = FakeWhisperModel([FakeRawSegment(start=0.0, end=1.0, text="hi", words=None)])
+
+    segments = transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert segments[0].words == []
 
 
 def test_transcribe_with_injected_model_ignores_on_stage():

@@ -41,9 +41,12 @@ async def update_segment(
 
     for index, segment in enumerate(item.segments):
         if segment.id == segment_id:
-            updated = segment.model_copy(
-                update=update.model_dump(exclude_unset=True, exclude_none=True)
-            )
+            changes = update.model_dump(exclude_unset=True, exclude_none=True)
+            if "text" in changes and changes["text"] != segment.text:
+                # 원문이 바뀌면 단어별 타임스탬프 정렬이 깨지므로 비운다
+                # (부정확한 카라오케 강조보다 강조 없음이 안전).
+                changes["words"] = []
+            updated = segment.model_copy(update=changes)
             if updated.start >= updated.end:
                 raise HTTPException(
                     status_code=400, detail="시작 시간은 종료 시간보다 빨라야 합니다."
