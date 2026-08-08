@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReviewDiffEntry, Segment } from '../api/types'
-import { updateSegment } from '../api/client'
+import { detectFillerSegments, updateSegment } from '../api/client'
 import { formatClock } from '../utils/time'
 
 type Props = {
@@ -83,6 +83,8 @@ export function SegmentList({
   const [findText, setFindText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [isReplacing, setIsReplacing] = useState(false)
+  const [fillerLanguage, setFillerLanguage] = useState<'ko' | 'en'>('ko')
+  const [isDetectingFillers, setIsDetectingFillers] = useState(false)
 
   function toggleChecked(segmentId: string) {
     setCheckedIds((prev) => {
@@ -131,6 +133,16 @@ export function SegmentList({
       await onFindReplace(findField, findText, replaceText)
     } finally {
       setIsReplacing(false)
+    }
+  }
+
+  async function handleDetectFillersClick() {
+    setIsDetectingFillers(true)
+    try {
+      const fillerIds = await detectFillerSegments(projectId, itemId, fillerLanguage)
+      setCheckedIds((prev) => new Set([...prev, ...fillerIds]))
+    } finally {
+      setIsDetectingFillers(false)
     }
   }
 
@@ -249,6 +261,21 @@ export function SegmentList({
           data-tip="원문 또는 번역 전체에서 일치하는 텍스트를 한 번에 바꿉니다."
         >
           {isReplacing ? '바꾸는 중...' : '모두 바꾸기'}
+        </button>
+      </div>
+
+      <div className="segment-filler-detect">
+        <select value={fillerLanguage} onChange={(event) => setFillerLanguage(event.target.value as 'ko' | 'en')}>
+          <option value="ko">한국어</option>
+          <option value="en">영어</option>
+        </select>
+        <button
+          type="button"
+          onClick={handleDetectFillersClick}
+          disabled={segments.length === 0 || isDetectingFillers}
+          data-tip="'음', '어'처럼 문장 전체가 필러워드인 세그먼트를 찾아 선택 상태로 만듭니다. 삭제는 아래 선택 항목 삭제 버튼으로 직접 확인 후 실행하세요."
+        >
+          {isDetectingFillers ? '찾는 중...' : '필러워드 자동 찾기'}
         </button>
       </div>
 

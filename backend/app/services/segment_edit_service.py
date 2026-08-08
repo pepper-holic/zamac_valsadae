@@ -1,7 +1,11 @@
+import re
 import uuid
 
+from app.core.config import FILLER_WORDS_EN, FILLER_WORDS_KO
 from app.models.schemas import Segment
 from app.services.readability_service import assess_readability
+
+_PUNCTUATION_RE = re.compile(r"[.,!?…~\-'\"“”‘’、。！？:;]+")
 
 
 def _with_readability(segment: Segment) -> Segment:
@@ -88,3 +92,20 @@ def find_replace(
         else:
             updated.append(segment)
     return updated
+
+
+def _normalize_for_filler_match(text: str) -> str:
+    stripped = _PUNCTUATION_RE.sub("", text).strip()
+    return stripped.lower()
+
+
+def find_filler_segments(segments: list[Segment], language: str) -> list[str]:
+    """세그먼트 텍스트가 필러워드 사전과 완전히 일치하는(=문장 전체가 필러워드 단독인) 세그먼트 id 목록."""
+    filler_words = FILLER_WORDS_KO if language == "ko" else FILLER_WORDS_EN
+    normalized_fillers = {word.lower() for word in filler_words}
+
+    return [
+        segment.id
+        for segment in segments
+        if _normalize_for_filler_match(segment.text) in normalized_fillers
+    ]

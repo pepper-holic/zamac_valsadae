@@ -5,6 +5,7 @@ from app.models.schemas import (
     MediaItem,
     Project,
     Segment,
+    SegmentDetectFillersRequest,
     SegmentFindReplaceRequest,
     SegmentMergeRequest,
     SegmentSplitRequest,
@@ -126,6 +127,18 @@ async def find_replace_segments(
     )
     store.save(project)
     return item.segments
+
+
+@router.post("/{project_id}/items/{item_id}/segments/detect-fillers", response_model=list[str])
+async def detect_filler_segments(
+    project_id: str,
+    item_id: str,
+    request: SegmentDetectFillersRequest,
+    store: ProjectStore = Depends(get_store),
+) -> list[str]:
+    _, item = _get_project_and_item(project_id, item_id, store)
+
+    return segment_edit_service.find_filler_segments(item.segments, language=request.language)
 
 
 @router.delete("/{project_id}/items/{item_id}/segments/{segment_id}", status_code=204)

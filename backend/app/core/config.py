@@ -35,6 +35,30 @@ WHISPER_MODEL_SIZES = (
     "large-v3-turbo",
 )
 
+FILLER_WORDS_KO = (
+    "음",
+    "어",
+    "그",
+    "저",
+    "그니까",
+    "그러니까",
+    "아",
+    "에",
+    "뭐",
+    "이제",
+)
+
+FILLER_WORDS_EN = (
+    "um",
+    "uh",
+    "er",
+    "ah",
+    "like",
+    "you know",
+    "so",
+    "well",
+)
+
 
 @dataclass(frozen=True)
 class Settings:

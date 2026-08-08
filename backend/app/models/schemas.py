@@ -124,6 +124,10 @@ class SegmentFindReplaceRequest(BaseModel):
     replace: str = ""
 
 
+class SegmentDetectFillersRequest(BaseModel):
+    language: Literal["ko", "en"] = "ko"
+
+
 class UndoRedoResult(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
     can_undo: bool = False

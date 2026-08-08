@@ -1,7 +1,12 @@
 import pytest
 
 from app.models.schemas import Segment
-from app.services.segment_edit_service import find_replace, merge_segments, split_segment
+from app.services.segment_edit_service import (
+    find_filler_segments,
+    find_replace,
+    merge_segments,
+    split_segment,
+)
 
 
 def test_split_segment_divides_time_range_at_split_point():
@@ -181,3 +186,76 @@ def test_find_replace_does_not_mutate_original_segments():
     find_replace(segments, field="text", find="world", replace="earth")
 
     assert segments[0].text == "hello world"
+
+
+def test_find_filler_segments_detects_standalone_korean_filler():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text="음"),
+        Segment(id="2", start=1.0, end=2.0, text="안녕하세요"),
+    ]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == ["1"]
+
+
+def test_find_filler_segments_ignores_filler_word_inside_real_sentence():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="음식이 맛있어요")]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == []
+
+
+def test_find_filler_segments_strips_punctuation_and_whitespace():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="  어... ")]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == ["1"]
+
+
+def test_find_filler_segments_detects_english_filler_case_insensitive():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text="Um"),
+        Segment(id="2", start=1.0, end=2.0, text="Understood"),
+    ]
+
+    ids = find_filler_segments(segments, language="en")
+
+    assert ids == ["1"]
+
+
+def test_find_filler_segments_empty_list_returns_empty():
+    assert find_filler_segments([], language="ko") == []
+
+
+def test_find_filler_segments_ignores_empty_or_whitespace_only_text():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text=""),
+        Segment(id="2", start=1.0, end=2.0, text="   "),
+        Segment(id="3", start=2.0, end=3.0, text="..."),
+    ]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == []
+
+
+def test_find_filler_segments_ignores_mixed_language_text():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="음 hmm")]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == []
+
+
+def test_find_filler_segments_strips_full_width_and_quote_punctuation():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text="음、"),
+        Segment(id="2", start=1.0, end=2.0, text='"어"'),
+    ]
+
+    ids = find_filler_segments(segments, language="ko")
+
+    assert ids == ["1", "2"]

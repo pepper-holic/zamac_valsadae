@@ -211,6 +211,19 @@ export async function findReplaceSegments(
   return parseOrThrow<Segment[]>(response)
 }
 
+export async function detectFillerSegments(
+  projectId: string,
+  itemId: string,
+  language: 'ko' | 'en' = 'ko',
+): Promise<string[]> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/detect-fillers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  })
+  return parseOrThrow<string[]>(response)
+}
+
 export async function updateSubtitleStyle(
   projectId: string,
   style: SubtitleStyle,

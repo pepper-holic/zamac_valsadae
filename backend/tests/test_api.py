@@ -626,6 +626,40 @@ def test_find_replace_updates_matching_segments(client, monkeypatch):
     assert texts == ["hello earth", "goodbye"]
 
 
+def test_detect_fillers_returns_filler_segment_ids_without_deleting(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="음"),
+            Segment(id="s2", start=1.0, end=2.0, text="안녕하세요"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(_segments_url(ctx, "/detect-fillers"), json={"language": "ko"})
+
+    assert response.status_code == 200
+    assert response.json() == ["s1"]
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert len(item["segments"]) == 2
+
+
+def test_detect_fillers_missing_item_returns_404(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/does-not-exist/segments/detect-fillers",
+        json={"language": "ko"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_undo_restores_segment_text_before_last_update(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
