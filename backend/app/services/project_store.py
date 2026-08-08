@@ -42,6 +42,12 @@ class ProjectStore:
     def media_path(self, project_id: str, item_id: str) -> Path:
         return self._project_dir(project_id) / f"media_{item_id}"
 
+    def rendered_media_path(self, project_id: str, item_id: str) -> Path:
+        return self._project_dir(project_id) / f"rendered_{item_id}.mp4"
+
+    def render_ass_path(self, project_id: str, item_id: str) -> Path:
+        return self._project_dir(project_id) / f"render_{item_id}.ass"
+
     def create_project(self, name: str = "") -> Project:
         project = Project(id=uuid.uuid4().hex, name=name)
         self.save(project)

@@ -179,6 +179,21 @@ def test_delete_does_not_affect_other_projects(store):
     assert store.get(keep.id).id == keep.id
 
 
+def test_save_persists_subtitle_style_and_presets(store):
+    from app.models.schemas import NamedSubtitleStyle, SubtitleStyle
+
+    project = store.create_project()
+    project.subtitle_style = SubtitleStyle(font_size=40, color="#00FF00")
+    project.style_presets = [NamedSubtitleStyle(name="preset-a", style=SubtitleStyle())]
+
+    store.save(project)
+    reloaded = store.get(project.id)
+
+    assert reloaded.subtitle_style.font_size == 40
+    assert reloaded.subtitle_style.color == "#00FF00"
+    assert [p.name for p in reloaded.style_presets] == ["preset-a"]
+
+
 def _segments(*texts: str) -> list[Segment]:
     return [Segment(id=str(i), text=text) for i, text in enumerate(texts)]
 

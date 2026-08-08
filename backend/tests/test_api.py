@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_store
 from app.main import app
 from app.models.schemas import Segment
+from app.services import render_service
 from app.services.project_store import ProjectStore
 
 
@@ -143,6 +144,88 @@ def test_update_glossary_persists_terms(client):
     assert response.json()["glossary"] == {"Zamak": "Zamak Corp"}
     reloaded = client.get(f"/projects/{project['id']}").json()
     assert reloaded["glossary"] == {"Zamak": "Zamak Corp"}
+
+
+def test_project_starts_with_default_subtitle_style(client):
+    project = _create_project(client)
+
+    assert project["subtitle_style"]["font_family"] == "Pretendard"
+    assert project["subtitle_style"]["position"] == "bottom"
+    assert project["style_presets"] == []
+
+
+def test_update_style_persists_changes(client):
+    project = _create_project(client)
+
+    response = client.put(
+        f"/projects/{project['id']}/style",
+        json={"font_size": 48, "color": "#00FF00", "position": "top"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["subtitle_style"]["font_size"] == 48
+    assert response.json()["subtitle_style"]["color"] == "#00FF00"
+    reloaded = client.get(f"/projects/{project['id']}").json()
+    assert reloaded["subtitle_style"]["position"] == "top"
+
+
+def test_update_style_missing_project_returns_404(client):
+    response = client.put("/projects/does-not-exist/style", json={})
+
+    assert response.status_code == 404
+
+
+def test_create_style_preset_appends_to_list(client):
+    project = _create_project(client)
+
+    response = client.post(
+        f"/projects/{project['id']}/style/presets",
+        json={"name": "노란자막", "style": {"color": "#FFFF00"}},
+    )
+
+    assert response.status_code == 200
+    presets = response.json()["style_presets"]
+    assert len(presets) == 1
+    assert presets[0]["name"] == "노란자막"
+    assert presets[0]["style"]["color"] == "#FFFF00"
+
+
+def test_create_style_preset_with_same_name_replaces_it(client):
+    project = _create_project(client)
+    client.post(
+        f"/projects/{project['id']}/style/presets",
+        json={"name": "노란자막", "style": {"color": "#FFFF00"}},
+    )
+
+    response = client.post(
+        f"/projects/{project['id']}/style/presets",
+        json={"name": "노란자막", "style": {"color": "#EEEE00"}},
+    )
+
+    presets = response.json()["style_presets"]
+    assert len(presets) == 1
+    assert presets[0]["style"]["color"] == "#EEEE00"
+
+
+def test_delete_style_preset_removes_it(client):
+    project = _create_project(client)
+    client.post(
+        f"/projects/{project['id']}/style/presets",
+        json={"name": "노란자막", "style": {"color": "#FFFF00"}},
+    )
+
+    response = client.delete(f"/projects/{project['id']}/style/presets/노란자막")
+
+    assert response.status_code == 200
+    assert response.json()["style_presets"] == []
+
+
+def test_delete_missing_style_preset_returns_404(client):
+    project = _create_project(client)
+
+    response = client.delete(f"/projects/{project['id']}/style/presets/없음")
+
+    assert response.status_code == 404
 
 
 def test_transcribe_runs_background_task_and_updates_segments(client, monkeypatch):
@@ -619,6 +702,99 @@ def test_new_edit_after_undo_clears_redo_stack(client, monkeypatch):
     response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/redo")
 
     assert response.status_code == 400
+
+
+def _transcribe_one_segment(client, ctx, monkeypatch, text: str = "안녕하세요") -> None:
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text=text)],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+
+def test_render_starts_and_marks_item_rendered(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    _transcribe_one_segment(client, ctx, monkeypatch)
+
+    monkeypatch.setattr(
+        "app.api.export.render_service.probe_duration_seconds", lambda *a, **k: 1.5
+    )
+
+    def fake_render(**kwargs):
+        kwargs["on_progress"](1.0)
+
+    monkeypatch.setattr("app.api.export.render_service.render", fake_render)
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render", json={}
+    )
+
+    assert response.status_code == 200
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "rendered"
+    assert item["rendered_path"] is not None
+    assert item["progress"] == 1.0
+
+
+def test_render_without_segments_returns_400(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render", json={}
+    )
+
+    assert response.status_code == 400
+
+
+def test_render_marks_item_error_on_ffmpeg_failure(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    _transcribe_one_segment(client, ctx, monkeypatch)
+
+    monkeypatch.setattr(
+        "app.api.export.render_service.probe_duration_seconds", lambda *a, **k: 1.5
+    )
+
+    def fake_render(**kwargs):
+        raise render_service.RenderError("ffmpeg exploded")
+
+    monkeypatch.setattr("app.api.export.render_service.render", fake_render)
+
+    client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render", json={})
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "error"
+    assert "ffmpeg exploded" in item["error"]
+
+
+def test_render_cancelled_marks_item_error(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    _transcribe_one_segment(client, ctx, monkeypatch)
+
+    monkeypatch.setattr(
+        "app.api.export.render_service.probe_duration_seconds", lambda *a, **k: 1.5
+    )
+
+    def fake_render(**kwargs):
+        raise render_service.RenderCancelled("취소됨")
+
+    monkeypatch.setattr("app.api.export.render_service.render", fake_render)
+
+    client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render", json={})
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "error"
+    assert "취소" in item["error"]
+
+
+def test_download_rendered_video_missing_returns_404(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.get(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/rendered")
+
+    assert response.status_code == 404
 
 
 def test_export_srt(client, monkeypatch):

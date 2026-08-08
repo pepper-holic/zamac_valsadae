@@ -17,13 +17,15 @@ import {
   updateSegment,
 } from './api/client'
 import type { MediaItem, Project, ReviewDiffEntry, ReviewImportResult, Segment } from './api/types'
+import type { Toast } from './components/ProgressToast'
+import { ProgressToast } from './components/ProgressToast'
 import { SegmentDetailPanel } from './components/SegmentDetailPanel'
 import { SegmentList } from './components/SegmentList'
 import { Toolbar } from './components/Toolbar'
 import { VideoStage } from './components/VideoStage'
 
 const POLL_INTERVAL_MS = 1500
-const ACTIVE_STATUSES = new Set(['transcribing', 'translating'])
+const ACTIVE_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 
 type QueueEntry = { projectId: string; itemId: string }
 type HistoryState = { canUndo: boolean; canRedo: boolean }
@@ -226,7 +228,7 @@ function App() {
     [project, selectedItemId],
   )
 
-  const handleGlossaryUpdated = useCallback((updated: Project) => {
+  const handleProjectUpdated = useCallback((updated: Project) => {
     setProject((prev) => (prev?.id === updated.id ? updated : prev))
     setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
   }, [])
@@ -255,7 +257,7 @@ function App() {
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [selectedItemId],
+    [selectedItemId, setItemHistoryState],
   )
 
   const handleSegmentDeleted = useCallback(
@@ -275,7 +277,7 @@ function App() {
       })
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [selectedItemId, selectedSegmentId],
+    [selectedItemId, selectedSegmentId, setItemHistoryState],
   )
 
   const handleSplitSegment = useCallback(
@@ -296,7 +298,7 @@ function App() {
       setSelectedSegmentId(first.id)
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [project, selectedItemId, selectedSegmentId],
+    [project, selectedItemId, selectedSegmentId, setItemHistoryState],
   )
 
   const handleMergeSegments = useCallback(
@@ -316,7 +318,7 @@ function App() {
       setSelectedSegmentId(merged.id)
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [project, selectedItemId],
+    [project, selectedItemId, setItemHistoryState],
   )
 
   const handleFindReplace = useCallback(
@@ -328,7 +330,7 @@ function App() {
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [project, selectedItemId],
+    [project, selectedItemId, setItemHistoryState],
   )
 
   const handleBulkDelete = useCallback(
@@ -345,7 +347,7 @@ function App() {
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [project, selectedItemId],
+    [project, selectedItemId, setItemHistoryState],
   )
 
   const handleBulkMarkReviewed = useCallback(
@@ -365,7 +367,7 @@ function App() {
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
-    [project, selectedItemId],
+    [project, selectedItemId, setItemHistoryState],
   )
 
   const handleUndo = useCallback(async () => {
@@ -375,7 +377,7 @@ function App() {
       prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
     )
     setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
-  }, [project, selectedItemId, canUndo])
+  }, [project, selectedItemId, canUndo, setItemHistoryState])
 
   const handleRedo = useCallback(async () => {
     if (!project || !selectedItemId || !canRedo) return
@@ -384,7 +386,7 @@ function App() {
       prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
     )
     setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
-  }, [project, selectedItemId, canRedo])
+  }, [project, selectedItemId, canRedo, setItemHistoryState])
 
   const handleResizeSegment = useCallback(
     async (segmentId: string, edge: 'start' | 'end', time: number) => {
@@ -491,6 +493,34 @@ function App() {
     setReviewDiffs((prev) => prev.filter((entry) => entry !== diff))
   }, [])
 
+  const toasts: Toast[] = []
+  if (activeQueueEntry || transcribeQueue.length > 0) {
+    const activeItem = activeQueueEntry
+      ? projects
+          .find((p) => p.id === activeQueueEntry.projectId)
+          ?.items.find((i) => i.id === activeQueueEntry.itemId)
+      : undefined
+    const queueMessage = [
+      '일괄 전사 진행 중',
+      activeItem ? `: ${activeItem.filename}` : '',
+      transcribeQueue.length > 0 ? ` (대기 중 ${transcribeQueue.length}개)` : '',
+    ].join('')
+    toasts.push({
+      id: 'transcribe-queue',
+      tone: 'info',
+      message: queueMessage,
+      progress: activeItem?.progress ?? null,
+    })
+  }
+  if (reviewUnknownIds.length > 0) {
+    toasts.push({
+      id: 'review-unknown-ids',
+      tone: 'warning',
+      message: `검수 파일에 알 수 없는 세그먼트 ID가 있습니다: ${reviewUnknownIds.join(', ')}`,
+      onDismiss: () => setReviewUnknownIds([]),
+    })
+  }
+
   const segments = item?.segments ?? []
   const selectedSegment = segments.find((s) => s.id === selectedSegmentId) ?? null
   const selectedIndex = segments.findIndex((s) => s.id === selectedSegmentId)
@@ -517,35 +547,23 @@ function App() {
         onItemUpdated={handleItemUpdated}
         onItemDeleted={handleItemDeleted}
         onProjectDeleted={handleProjectDeleted}
-        onGlossaryUpdated={handleGlossaryUpdated}
+        onGlossaryUpdated={handleProjectUpdated}
+        onStyleUpdated={handleProjectUpdated}
         onReviewImported={handleReviewImported}
         batchModel={batchModel}
         onBatchModelChange={setBatchModel}
       />
 
-      {(activeQueueEntry || transcribeQueue.length > 0) && (
-        <p className="hint-text toolbar-warning">
-          일괄 전사 진행 중
-          {activeQueueEntry &&
-            `: ${
-              projects
-                .find((p) => p.id === activeQueueEntry.projectId)
-                ?.items.find((i) => i.id === activeQueueEntry.itemId)?.filename ?? ''
-            }`}
-          {transcribeQueue.length > 0 && ` (대기 중 ${transcribeQueue.length}개)`}
-        </p>
-      )}
-
-      {reviewUnknownIds.length > 0 && (
-        <p className="error-text toolbar-warning">
-          검수 파일에 알 수 없는 세그먼트 ID가 있습니다: {reviewUnknownIds.join(', ')}
-        </p>
-      )}
+      <ProgressToast toasts={toasts} />
 
       {!project && (
-        <p className="empty-hint app-empty-hint">
-          상단에서 파일을 업로드하거나 프로젝트를 선택하세요.
-        </p>
+        <div className="empty-hint app-empty-hint app-empty-hint-onboarding">
+          <p className="app-empty-hint-icon" aria-hidden="true">
+            🎬
+          </p>
+          <p>영상이나 오디오 파일을 업로드하면 자동으로 전사가 시작됩니다.</p>
+          <p className="hint-text">상단의 "+ 업로드" 버튼을 누르거나, 파일을 이 창에 끌어다 놓으세요.</p>
+        </div>
       )}
 
       {project && !item && (
@@ -566,6 +584,7 @@ function App() {
             isPlaying={isPlaying}
             playbackRate={playbackRate}
             loopSegment={loopSegment}
+            subtitleStyle={project.subtitle_style}
             onTimeUpdate={setCurrentTime}
             onDurationChange={setDuration}
             onPlayStateChange={setIsPlaying}

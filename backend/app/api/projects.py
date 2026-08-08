@@ -2,7 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_store
-from app.models.schemas import GlossaryUpdate, MediaItem, Project, ProjectCreate
+from app.models.schemas import (
+    GlossaryUpdate,
+    MediaItem,
+    NamedSubtitleStyle,
+    Project,
+    ProjectCreate,
+    StylePresetCreate,
+    SubtitleStyle,
+)
 from app.services import cancellation
 from app.services.project_store import (
     ItemNotFoundError,
@@ -11,7 +19,7 @@ from app.services.project_store import (
     ProjectStore,
 )
 
-_CANCELLABLE_STATUSES = ("transcribing", "translating")
+_CANCELLABLE_STATUSES = ("transcribing", "translating", "rendering")
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -56,6 +64,49 @@ async def update_glossary(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
     project.glossary = request.glossary
+    store.save(project)
+    return project
+
+
+@router.put("/{project_id}/style", response_model=Project)
+async def update_style(
+    project_id: str, style: SubtitleStyle, store: ProjectStore = Depends(get_store)
+) -> Project:
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    project.subtitle_style = style
+    store.save(project)
+    return project
+
+
+@router.post("/{project_id}/style/presets", response_model=Project)
+async def create_style_preset(
+    project_id: str, request: StylePresetCreate, store: ProjectStore = Depends(get_store)
+) -> Project:
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    preset = NamedSubtitleStyle(name=request.name, style=request.style)
+    project.style_presets = [p for p in project.style_presets if p.name != request.name] + [preset]
+    store.save(project)
+    return project
+
+
+@router.delete("/{project_id}/style/presets/{name}", response_model=Project)
+async def delete_style_preset(
+    project_id: str, name: str, store: ProjectStore = Depends(get_store)
+) -> Project:
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    remaining = [p for p in project.style_presets if p.name != name]
+    if len(remaining) == len(project.style_presets):
+        raise HTTPException(status_code=404, detail="프리셋을 찾을 수 없습니다.")
+    project.style_presets = remaining
     store.save(project)
     return project
 

@@ -36,7 +36,20 @@ def test_recover_interrupted_projects_marks_stuck_translating_item_as_error(tmp_
     assert store.get(project.id).items[0].status == "error"
 
 
-@pytest.mark.parametrize("status", ["uploaded", "transcribed", "translated", "error"])
+def test_recover_interrupted_projects_marks_stuck_rendering_item_as_error(tmp_path):
+    store = ProjectStore(root_dir=tmp_path)
+    project = store.create_project()
+    store.add_item(project.id, filename="a.wav", media_bytes=b"x")
+    project = store.get(project.id)
+    project.items[0].status = "rendering"
+    store.save(project)
+
+    recover_interrupted_projects(store)
+
+    assert store.get(project.id).items[0].status == "error"
+
+
+@pytest.mark.parametrize("status", ["uploaded", "transcribed", "translated", "rendered", "error"])
 def test_recover_interrupted_projects_leaves_finished_items_untouched(tmp_path, status):
     store = ProjectStore(root_dir=tmp_path)
     project = store.create_project()

@@ -5,6 +5,7 @@ import type {
   Project,
   ReviewImportResult,
   Segment,
+  SubtitleStyle,
   TranslationDirection,
   TranslationEngine,
   UndoRedoResult,
@@ -210,6 +211,39 @@ export async function findReplaceSegments(
   return parseOrThrow<Segment[]>(response)
 }
 
+export async function updateSubtitleStyle(
+  projectId: string,
+  style: SubtitleStyle,
+): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/style`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(style),
+  })
+  return parseOrThrow<Project>(response)
+}
+
+export async function saveStylePreset(
+  projectId: string,
+  name: string,
+  style: SubtitleStyle,
+): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/style/presets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, style }),
+  })
+  return parseOrThrow<Project>(response)
+}
+
+export async function deleteStylePreset(projectId: string, name: string): Promise<Project> {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/style/presets/${encodeURIComponent(name)}`,
+    { method: 'DELETE' },
+  )
+  return parseOrThrow<Project>(response)
+}
+
 export async function undoItem(projectId: string, itemId: string): Promise<UndoRedoResult> {
   const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/undo`, {
     method: 'POST',
@@ -222,6 +256,23 @@ export async function redoItem(projectId: string, itemId: string): Promise<UndoR
     method: 'POST',
   })
   return parseOrThrow<UndoRedoResult>(response)
+}
+
+export async function renderItem(
+  projectId: string,
+  itemId: string,
+  useTranslation: boolean,
+): Promise<MediaItem> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ use_translation: useTranslation }),
+  })
+  return parseOrThrow<MediaItem>(response)
+}
+
+export function renderedVideoUrl(projectId: string, itemId: string): string {
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/rendered`
 }
 
 export function exportUrl(

@@ -139,10 +139,6 @@
   margin: 0;
 }
 
-.toolbar-warning {
-  padding: 6px 20px 0;
-}
-
 .toolbar-help-button {
   padding: 8px 12px;
   border-radius: 6px;
@@ -283,6 +279,98 @@
   text-align: center;
 }
 
+.app-empty-hint-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-empty-hint-icon {
+  font-size: 40px;
+  margin-bottom: 4px;
+}
+
+/* ---------- Progress toasts ---------- */
+.progress-toast-stack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 40px));
+}
+
+.progress-toast {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  color: var(--text-h);
+  animation: progress-toast-in 180ms ease-out;
+}
+
+.progress-toast-info {
+  border-color: var(--accent-border);
+}
+
+.progress-toast-warning {
+  border-color: #d99a00;
+}
+
+.progress-toast-error {
+  border-color: #d9534f;
+}
+
+.progress-toast-message {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.progress-toast-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.progress-toast-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms linear;
+}
+
+.progress-toast-dismiss {
+  align-self: flex-end;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+@keyframes progress-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ---------- Upload button (shared) ---------- */
 .upload-button {
   display: inline-flex;
@@ -368,17 +456,14 @@
 
 .subtitle-overlay-text,
 .subtitle-overlay-translation {
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
   padding: 3px 10px;
   border-radius: 4px;
-  font-size: 14px;
   line-height: 1.4;
+  transition: opacity 120ms linear;
 }
 
-.subtitle-overlay-translation {
-  color: #ffe27a;
-  font-size: 13px;
+.subtitle-karaoke-highlight {
+  color: #ffd54a;
 }
 
 .timecode {
@@ -1005,13 +1090,59 @@
   color: var(--text);
 }
 
-.panel-row input[type='text'] {
+.panel-row input[type='text'],
+.panel-row input[type='number'] {
   padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
   font-size: 13px;
+}
+
+.panel-row input[type='number'] {
+  width: 70px;
+}
+
+.panel-row input[type='color'] {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.subtitle-style-panel .panel-row {
+  margin-bottom: 12px;
+}
+
+.subtitle-style-presets {
+  align-items: center;
+}
+
+.subtitle-style-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.subtitle-style-preset-chip button {
+  padding: 4px 10px;
+  border-radius: 0;
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.subtitle-style-preset-delete {
+  padding: 4px 8px !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  font-weight: 400 !important;
 }
 
 .glossary-block {

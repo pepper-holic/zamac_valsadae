@@ -4,6 +4,8 @@ export type ProjectStatus =
   | 'transcribed'
   | 'translating'
   | 'translated'
+  | 'rendering'
+  | 'rendered'
   | 'error'
 
 export type TranslationDirection = 'ko->en' | 'en->ko'
@@ -12,7 +14,7 @@ export type ExportFormat = 'srt' | 'vtt' | 'json' | 'ass' | 'ttml'
 
 export type QualityFlag = 'good' | 'check'
 
-export type ProgressStage = 'downloading_model' | 'processing' | 'diarizing'
+export type ProgressStage = 'downloading_model' | 'processing' | 'diarizing' | 'rendering'
 
 export interface Segment {
   id: string
@@ -40,6 +42,26 @@ export interface MediaItem {
   progress: number | null
   stage: ProgressStage | null
   segments: Segment[]
+  rendered_path: string | null
+}
+
+export interface SubtitleStyle {
+  font_family: string
+  font_size: number
+  font_weight: 'normal' | 'bold'
+  color: string
+  outline_color: string
+  outline_width: number
+  background: string | null
+  position: 'bottom' | 'top' | 'custom'
+  fade_in_ms: number
+  fade_out_ms: number
+  karaoke_highlight: boolean
+}
+
+export interface NamedSubtitleStyle {
+  name: string
+  style: SubtitleStyle
 }
 
 export interface Project {
@@ -47,6 +69,8 @@ export interface Project {
   name: string
   items: MediaItem[]
   glossary: Record<string, string>
+  subtitle_style: SubtitleStyle
+  style_presets: NamedSubtitleStyle[]
 }
 
 export interface ReviewDiffEntry {

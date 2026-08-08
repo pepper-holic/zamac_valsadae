@@ -5,13 +5,16 @@ import { deleteProject } from '../api/client'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
 import { ReviewPanel } from './ReviewPanel'
+import { SubtitleStylePanel } from './SubtitleStylePanel'
 import { TranscribePanel } from './TranscribePanel'
 import { TranslationPanel } from './TranslationPanel'
 
-type MenuKey = 'transcribe' | 'translate' | 'export' | 'review'
+type MenuKey = 'transcribe' | 'translate' | 'style' | 'export' | 'review'
+
+const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 
 function formatItemStatus(item: MediaItem): string {
-  if ((item.status === 'transcribing' || item.status === 'translating') && item.progress != null) {
+  if (IN_PROGRESS_STATUSES.has(item.status) && item.progress != null) {
     return `${item.status} ${Math.round(item.progress * 100)}%`
   }
   return item.status
@@ -36,6 +39,7 @@ type Props = {
   onItemDeleted: (itemId: string) => Promise<void>
   onProjectDeleted: (projectId: string) => void
   onGlossaryUpdated: (project: Project) => void
+  onStyleUpdated: (project: Project) => void
   onReviewImported: (result: ReviewImportResult) => void
   batchModel: string
   onBatchModelChange: (model: string) => void
@@ -54,6 +58,7 @@ export function Toolbar({
   onItemDeleted,
   onProjectDeleted,
   onGlossaryUpdated,
+  onStyleUpdated,
   onReviewImported,
   batchModel,
   onBatchModelChange,
@@ -294,6 +299,14 @@ export function Toolbar({
           </button>
           <button
             type="button"
+            className={openMenu === 'style' ? 'toolbar-tab active' : 'toolbar-tab'}
+            onClick={() => toggleMenu('style')}
+            data-tip="자막의 글꼴/색상/위치/효과를 설정하고 미리보기에 바로 반영합니다."
+          >
+            자막 스타일
+          </button>
+          <button
+            type="button"
             className={openMenu === 'export' ? 'toolbar-tab active' : 'toolbar-tab'}
             onClick={() => toggleMenu('export')}
             data-tip="SRT/VTT/JSON 자막 파일로 내려받습니다."
@@ -333,7 +346,12 @@ export function Toolbar({
               onGlossaryUpdated={onGlossaryUpdated}
             />
           )}
-          {openMenu === 'export' && <ExportPanel project={project} item={item} />}
+          {openMenu === 'style' && (
+            <SubtitleStylePanel project={project} onStyleUpdated={onStyleUpdated} />
+          )}
+          {openMenu === 'export' && (
+            <ExportPanel project={project} item={item} onItemUpdated={onItemUpdated} />
+          )}
           {openMenu === 'review' && (
             <ReviewPanel project={project} item={item} onImported={onReviewImported} />
           )}

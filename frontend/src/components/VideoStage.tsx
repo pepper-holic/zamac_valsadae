@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Segment } from '../api/types'
+import type { Segment, SubtitleStyle } from '../api/types'
 import { formatTimestamp } from '../utils/time'
 import { computeWaveformPeaks } from '../utils/waveform'
+import {
+  karaokeHighlightLength,
+  subtitleContainerStyle,
+  subtitleFadeOpacity,
+  subtitleStyleToCss,
+} from '../utils/subtitleStyle'
 
 type Props = {
   videoRef: React.RefObject<HTMLVideoElement | null>
@@ -13,6 +19,7 @@ type Props = {
   isPlaying: boolean
   playbackRate: number
   loopSegment: boolean
+  subtitleStyle: SubtitleStyle
   onTimeUpdate: (time: number) => void
   onDurationChange: (duration: number) => void
   onPlayStateChange: (isPlaying: boolean) => void
@@ -36,6 +43,22 @@ const STEP_SECONDS = 1
 const WAVEFORM_POINTS = 300
 const MIN_SEGMENT_DURATION = 0.2
 
+function renderSubtitleText(
+  segment: Segment,
+  text: string,
+  currentTime: number,
+  style: SubtitleStyle,
+): React.ReactNode {
+  if (!style.karaoke_highlight) return text
+  const highlightLength = karaokeHighlightLength(segment, currentTime, text)
+  return (
+    <>
+      <span className="subtitle-karaoke-highlight">{text.slice(0, highlightLength)}</span>
+      {text.slice(highlightLength)}
+    </>
+  )
+}
+
 export function VideoStage({
   videoRef,
   src,
@@ -46,6 +69,7 @@ export function VideoStage({
   isPlaying,
   playbackRate,
   loopSegment,
+  subtitleStyle,
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
@@ -157,11 +181,27 @@ export function VideoStage({
           onPause={() => onPlayStateChange(false)}
         />
         {activeSegment && (activeSegment.text || activeSegment.translation) && (
-          <div className="subtitle-overlay">
+          <div
+            className="subtitle-overlay"
+            style={{
+              ...subtitleContainerStyle(subtitleStyle),
+              opacity: subtitleFadeOpacity(activeSegment, currentTime, subtitleStyle),
+            }}
+          >
             {activeSegment.translation && (
-              <span className="subtitle-overlay-translation">{activeSegment.translation}</span>
+              <span
+                className="subtitle-overlay-translation"
+                style={{
+                  ...subtitleStyleToCss(subtitleStyle),
+                  fontSize: `${Math.round(subtitleStyle.font_size * 0.75)}px`,
+                }}
+              >
+                {renderSubtitleText(activeSegment, activeSegment.translation, currentTime, subtitleStyle)}
+              </span>
             )}
-            <span className="subtitle-overlay-text">{activeSegment.text}</span>
+            <span className="subtitle-overlay-text" style={subtitleStyleToCss(subtitleStyle)}>
+              {renderSubtitleText(activeSegment, activeSegment.text, currentTime, subtitleStyle)}
+            </span>
           </div>
         )}
       </div>

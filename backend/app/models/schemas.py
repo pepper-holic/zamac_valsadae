@@ -7,6 +7,8 @@ ProjectStatus = Literal[
     "transcribed",
     "translating",
     "translated",
+    "rendering",
+    "rendered",
     "error",
 ]
 
@@ -14,7 +16,7 @@ TranslationDirection = Literal["ko->en", "en->ko"]
 TranslationEngine = Literal["local", "api"]
 ExportFormat = Literal["srt", "vtt", "json", "ass", "ttml"]
 QualityFlag = Literal["good", "check"]
-ProgressStage = Literal["downloading_model", "processing", "diarizing"]
+ProgressStage = Literal["downloading_model", "processing", "diarizing", "rendering"]
 
 
 class Segment(BaseModel):
@@ -31,6 +33,25 @@ class Segment(BaseModel):
     readability_flag: QualityFlag | None = None
     readability_reason: str | None = None
     reviewed: bool = False
+
+
+class SubtitleStyle(BaseModel):
+    font_family: str = "Pretendard"
+    font_size: int = 32
+    font_weight: Literal["normal", "bold"] = "bold"
+    color: str = "#FFFFFF"
+    outline_color: str = "#000000"
+    outline_width: int = 2
+    background: str | None = None
+    position: Literal["bottom", "top", "custom"] = "bottom"
+    fade_in_ms: int = 0
+    fade_out_ms: int = 0
+    karaoke_highlight: bool = False
+
+
+class NamedSubtitleStyle(BaseModel):
+    name: str
+    style: SubtitleStyle = Field(default_factory=SubtitleStyle)
 
 
 class MediaItem(BaseModel):
@@ -50,6 +71,7 @@ class MediaItem(BaseModel):
     progress: float | None = None
     stage: ProgressStage | None = None
     segments: list[Segment] = Field(default_factory=list)
+    rendered_path: str | None = None
 
 
 class Project(BaseModel):
@@ -57,10 +79,16 @@ class Project(BaseModel):
     name: str = ""
     items: list[MediaItem] = Field(default_factory=list)
     glossary: dict[str, str] = Field(default_factory=dict)
+    subtitle_style: SubtitleStyle = Field(default_factory=SubtitleStyle)
+    style_presets: list[NamedSubtitleStyle] = Field(default_factory=list)
 
 
 class ProjectCreate(BaseModel):
     name: str = ""
+
+
+class RenderRequest(BaseModel):
+    use_translation: bool = False
 
 
 class TranscribeRequest(BaseModel):
@@ -75,6 +103,11 @@ class TranslateRequest(BaseModel):
 
 class GlossaryUpdate(BaseModel):
     glossary: dict[str, str] = Field(default_factory=dict)
+
+
+class StylePresetCreate(BaseModel):
+    name: str
+    style: SubtitleStyle
 
 
 class SegmentSplitRequest(BaseModel):
