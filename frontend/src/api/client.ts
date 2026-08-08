@@ -1,11 +1,13 @@
 import type {
   ExportFormat,
+  MediaItem,
   ModelStatus,
   Project,
   ReviewImportResult,
   Segment,
   TranslationDirection,
   TranslationEngine,
+  UndoRedoResult,
 } from './types'
 
 // Empty string means "same origin" - correct for production, where the
@@ -22,11 +24,33 @@ async function parseOrThrow<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export async function uploadProject(file: File): Promise<Project> {
+export async function createProject(name: string = ''): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  return parseOrThrow<Project>(response)
+}
+
+export async function addItem(projectId: string, file: File): Promise<MediaItem> {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`${API_BASE}/projects`, { method: 'POST', body: formData })
-  return parseOrThrow<Project>(response)
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items`, {
+    method: 'POST',
+    body: formData,
+  })
+  return parseOrThrow<MediaItem>(response)
+}
+
+export async function deleteItem(projectId: string, itemId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`API 오류 (${response.status}): ${body}`)
+  }
 }
 
 export async function listProjects(): Promise<Project[]> {
@@ -39,8 +63,8 @@ export async function getProject(projectId: string): Promise<Project> {
   return parseOrThrow<Project>(response)
 }
 
-export function mediaUrl(projectId: string): string {
-  return `${API_BASE}/projects/${projectId}/media`
+export function mediaUrl(projectId: string, itemId: string): string {
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/media`
 }
 
 export async function getModelStatus(): Promise<ModelStatus> {
@@ -48,30 +72,56 @@ export async function getModelStatus(): Promise<ModelStatus> {
   return parseOrThrow<ModelStatus>(response)
 }
 
-export async function transcribeProject(projectId: string, model: string): Promise<Project> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/transcribe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model }),
-  })
-  return parseOrThrow<Project>(response)
+export async function transcribeItem(
+  projectId: string,
+  itemId: string,
+  model: string,
+  diarize: boolean = false,
+): Promise<MediaItem> {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/items/${itemId}/transcribe`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, diarize }),
+    },
+  )
+  return parseOrThrow<MediaItem>(response)
 }
 
-export async function translateProject(
+export async function translateItem(
   projectId: string,
+  itemId: string,
   direction: TranslationDirection,
   engine: TranslationEngine,
-): Promise<Project> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/translate`, {
+): Promise<MediaItem> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/translate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ direction, engine }),
   })
+  return parseOrThrow<MediaItem>(response)
+}
+
+export async function updateGlossary(
+  projectId: string,
+  glossary: Record<string, string>,
+): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/glossary`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ glossary }),
+  })
   return parseOrThrow<Project>(response)
+}
+
+function segmentsBase(projectId: string, itemId: string): string {
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/segments`
 }
 
 export async function updateSegment(
   projectId: string,
+  itemId: string,
   segmentId: string,
   update: Partial<{
     text: string
@@ -81,7 +131,7 @@ export async function updateSegment(
     reviewed: boolean
   }>,
 ) {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/segments/${segmentId}`, {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/${segmentId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -89,9 +139,11 @@ export async function updateSegment(
   return parseOrThrow<Segment>(response)
 }
 
-export async function cancelProject(projectId: string): Promise<Project> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/cancel`, { method: 'POST' })
-  return parseOrThrow<Project>(response)
+export async function cancelItem(projectId: string, itemId: string): Promise<MediaItem> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/cancel`, {
+    method: 'POST',
+  })
+  return parseOrThrow<MediaItem>(response)
 }
 
 export async function deleteProject(projectId: string): Promise<void> {
@@ -102,8 +154,12 @@ export async function deleteProject(projectId: string): Promise<void> {
   }
 }
 
-export async function deleteSegment(projectId: string, segmentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/segments/${segmentId}`, {
+export async function deleteSegment(
+  projectId: string,
+  itemId: string,
+  segmentId: string,
+): Promise<void> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/${segmentId}`, {
     method: 'DELETE',
   })
   if (!response.ok) {
@@ -112,21 +168,83 @@ export async function deleteSegment(projectId: string, segmentId: string): Promi
   }
 }
 
-export function exportUrl(projectId: string, format: ExportFormat, useTranslation: boolean): string {
-  return `${API_BASE}/projects/${projectId}/export?format=${format}&use_translation=${useTranslation}`
+export async function splitSegment(
+  projectId: string,
+  itemId: string,
+  segmentId: string,
+  splitAt: number,
+): Promise<Segment[]> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/${segmentId}/split`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ split_at: splitAt }),
+  })
+  return parseOrThrow<Segment[]>(response)
 }
 
-export function reviewPackageUrl(projectId: string): string {
-  return `${API_BASE}/projects/${projectId}/review-package`
+export async function mergeSegments(
+  projectId: string,
+  itemId: string,
+  segmentIds: string[],
+): Promise<Segment> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segment_ids: segmentIds }),
+  })
+  return parseOrThrow<Segment>(response)
+}
+
+export async function findReplaceSegments(
+  projectId: string,
+  itemId: string,
+  field: 'text' | 'translation',
+  find: string,
+  replace: string,
+): Promise<Segment[]> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/find-replace`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field, find, replace }),
+  })
+  return parseOrThrow<Segment[]>(response)
+}
+
+export async function undoItem(projectId: string, itemId: string): Promise<UndoRedoResult> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/undo`, {
+    method: 'POST',
+  })
+  return parseOrThrow<UndoRedoResult>(response)
+}
+
+export async function redoItem(projectId: string, itemId: string): Promise<UndoRedoResult> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/redo`, {
+    method: 'POST',
+  })
+  return parseOrThrow<UndoRedoResult>(response)
+}
+
+export function exportUrl(
+  projectId: string,
+  itemId: string,
+  format: ExportFormat,
+  useTranslation: boolean,
+): string {
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/export?format=${format}&use_translation=${useTranslation}`
+}
+
+export function reviewPackageUrl(projectId: string, itemId: string): string {
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/review-package`
 }
 
 export async function importReviewPackage(
   projectId: string,
+  itemId: string,
   file: File,
 ): Promise<ReviewImportResult> {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`${API_BASE}/projects/${projectId}/review-import`, {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/review-import`, {
     method: 'POST',
     body: formData,
   })

@@ -22,31 +22,93 @@ def client(store):
     app.dependency_overrides.clear()
 
 
-def _upload_project(client) -> dict:
+def _create_project(client) -> dict:
+    response = client.post("/projects", json={})
+    assert response.status_code == 200
+    return response.json()
+
+
+def _add_item(client, project_id: str, filename: str = "sample.wav") -> dict:
     response = client.post(
-        "/projects",
-        files={"file": ("sample.wav", b"fake-audio-bytes", "audio/wav")},
+        f"/projects/{project_id}/items",
+        files={"file": (filename, b"fake-audio-bytes", "audio/wav")},
     )
     assert response.status_code == 200
     return response.json()
 
 
-def test_upload_project_creates_uploaded_status(client):
-    project = _upload_project(client)
+def _create_project_with_item(client, filename: str = "sample.wav") -> dict:
+    """Convenience helper mirroring the old single-file-per-project flow:
+    creates a project and immediately adds one item to it."""
+    project = _create_project(client)
+    item = _add_item(client, project["id"], filename=filename)
+    return {"project_id": project["id"], "item_id": item["id"], "filename": filename}
 
-    assert project["filename"] == "sample.wav"
-    assert project["status"] == "uploaded"
-    assert project["segments"] == []
+
+def test_create_project_starts_empty(client):
+    project = _create_project(client)
+
+    assert project["items"] == []
+
+
+def test_add_item_appends_to_project(client):
+    project = _create_project(client)
+
+    item = _add_item(client, project["id"], filename="sample.wav")
+
+    assert item["filename"] == "sample.wav"
+    assert item["status"] == "uploaded"
+    assert item["segments"] == []
+
+    reloaded = client.get(f"/projects/{project['id']}").json()
+    assert [i["id"] for i in reloaded["items"]] == [item["id"]]
+
+
+def test_add_multiple_items_are_managed_separately(client):
+    project = _create_project(client)
+    first = _add_item(client, project["id"], filename="a.wav")
+    second = _add_item(client, project["id"], filename="b.wav")
+
+    reloaded = client.get(f"/projects/{project['id']}").json()
+    assert [i["filename"] for i in reloaded["items"]] == ["a.wav", "b.wav"]
+    assert first["id"] != second["id"]
+
+
+def test_add_item_to_missing_project_returns_404(client):
+    response = client.post(
+        "/projects/does-not-exist/items",
+        files={"file": ("a.wav", b"x", "audio/wav")},
+    )
+
+    assert response.status_code == 404
+
+
+def test_delete_item_removes_it_from_project(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.delete(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}")
+
+    assert response.status_code == 204
+    reloaded = client.get(f"/projects/{ctx['project_id']}").json()
+    assert reloaded["items"] == []
+
+
+def test_delete_missing_item_returns_404(client):
+    project = _create_project(client)
+
+    response = client.delete(f"/projects/{project['id']}/items/missing")
+
+    assert response.status_code == 404
 
 
 def test_delete_project_removes_it_from_list(client):
-    created = _upload_project(client)
+    project = _create_project(client)
 
-    response = client.delete(f"/projects/{created['id']}")
+    response = client.delete(f"/projects/{project['id']}")
     assert response.status_code == 204
 
-    assert client.get(f"/projects/{created['id']}").status_code == 404
-    assert created["id"] not in [p["id"] for p in client.get("/projects").json()]
+    assert client.get(f"/projects/{project['id']}").status_code == 404
+    assert project["id"] not in [p["id"] for p in client.get("/projects").json()]
 
 
 def test_delete_missing_project_returns_404(client):
@@ -56,12 +118,12 @@ def test_delete_missing_project_returns_404(client):
 
 
 def test_get_project_returns_created_project(client):
-    created = _upload_project(client)
+    project = _create_project(client)
 
-    response = client.get(f"/projects/{created['id']}")
+    response = client.get(f"/projects/{project['id']}")
 
     assert response.status_code == 200
-    assert response.json()["id"] == created["id"]
+    assert response.json()["id"] == project["id"]
 
 
 def test_get_missing_project_returns_404(client):
@@ -70,24 +132,41 @@ def test_get_missing_project_returns_404(client):
     assert response.status_code == 404
 
 
+def test_update_glossary_persists_terms(client):
+    project = _create_project(client)
+
+    response = client.put(
+        f"/projects/{project['id']}/glossary", json={"glossary": {"Zamak": "Zamak Corp"}}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["glossary"] == {"Zamak": "Zamak Corp"}
+    reloaded = client.get(f"/projects/{project['id']}").json()
+    assert reloaded["glossary"] == {"Zamak": "Zamak Corp"}
+
+
 def test_transcribe_runs_background_task_and_updates_segments(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
     fake_segments = [Segment(id="s1", start=0.0, end=1.0, text="hello")]
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe", lambda *a, **k: fake_segments
     )
 
-    response = client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
     assert response.status_code == 200
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert project["status"] == "transcribed"
-    assert project["segments"][0]["text"] == "hello"
+    project = client.get(f"/projects/{ctx['project_id']}").json()
+    item = project["items"][0]
+    assert item["status"] == "transcribed"
+    assert item["segments"][0]["text"] == "hello"
 
 
 def test_transcribe_reports_final_progress_and_calls_on_progress(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
     fake_segments = [Segment(id="s1", start=0.0, end=1.0, text="hello")]
 
@@ -99,38 +178,47 @@ def test_transcribe_reports_final_progress_and_calls_on_progress(client, monkeyp
 
     monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
 
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert project["status"] == "transcribed"
-    assert project["progress"] == 1.0
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "transcribed"
+    assert item["progress"] == 1.0
 
 
 def test_transcribe_rejects_unknown_model(client):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
-    response = client.post(f"/projects/{created['id']}/transcribe", json={"model": "huge"})
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "huge"},
+    )
 
     assert response.status_code == 400
 
 
 def test_transcribe_marks_error_status_on_failure(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
     def _boom(*a, **k):
         raise RuntimeError("model exploded")
 
     monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", _boom)
 
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert project["status"] == "error"
-    assert "model exploded" in project["error"]
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "error"
+    assert "model exploded" in item["error"]
 
 
 def test_transcribe_reports_downloading_model_stage(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
     def fake_transcribe(media_path, model_size, on_progress=None, on_stage=None, **kwargs):
         if on_stage:
@@ -139,62 +227,68 @@ def test_transcribe_reports_downloading_model_stage(client, monkeypatch):
 
     monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
 
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    project = client.get(f"/projects/{created['id']}").json()
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
     # stage is cleared once the background task finishes successfully
-    assert project["status"] == "transcribed"
-    assert project["stage"] is None
+    assert item["status"] == "transcribed"
+    assert item["stage"] is None
 
 
 def test_transcribe_stopped_via_should_cancel_marks_error_with_cancel_message(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
     def fake_transcribe(media_path, model_size, should_cancel=None, **kwargs):
         from app.services import cancellation
         from app.services.whisper_service import TranscriptionCancelled
 
         # simulates an external POST /cancel arriving while transcribe() is running
-        cancellation.request_cancel(created["id"])
+        cancellation.request_cancel(ctx["item_id"])
         if should_cancel and should_cancel():
             raise TranscriptionCancelled("취소")
         return []
 
     monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
 
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert project["status"] == "error"
-    assert "취소" in project["error"]
-    assert project["progress"] is None
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "error"
+    assert "취소" in item["error"]
+    assert item["progress"] is None
 
 
-def test_cancel_endpoint_accepts_busy_project(client, store):
-    created = _upload_project(client)
-    project = store.get(created["id"])
-    project.status = "transcribing"
+def test_cancel_endpoint_accepts_busy_item(client, store):
+    ctx = _create_project_with_item(client)
+    project = store.get(ctx["project_id"])
+    project.items[0].status = "transcribing"
     store.save(project)
 
-    response = client.post(f"/projects/{created['id']}/cancel")
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/cancel")
 
     assert response.status_code == 200
     from app.services import cancellation
 
-    assert cancellation.is_cancelled(created["id"]) is True
-    cancellation.clear_cancel(created["id"])
+    assert cancellation.is_cancelled(ctx["item_id"]) is True
+    cancellation.clear_cancel(ctx["item_id"])
 
 
-def test_cancel_endpoint_rejects_non_busy_project(client):
-    created = _upload_project(client)
+def test_cancel_endpoint_rejects_non_busy_item(client):
+    ctx = _create_project_with_item(client)
 
-    response = client.post(f"/projects/{created['id']}/cancel")
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/cancel")
 
     assert response.status_code == 400
 
 
 def test_cancel_endpoint_missing_project_returns_404(client):
-    response = client.post("/projects/does-not-exist/cancel")
+    response = client.post("/projects/does-not-exist/items/missing/cancel")
 
     assert response.status_code == 404
 
@@ -219,20 +313,26 @@ def test_models_status_reports_uncached_models(client):
 
 
 def test_translate_requires_existing_segments(client):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
-    response = client.post(f"/projects/{created['id']}/translate", json={"direction": "ko->en"})
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
+        json={"direction": "ko->en"},
+    )
 
     assert response.status_code == 400
 
 
 def test_translate_fills_translation_field(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="안녕")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
     class FakeTranslator:
         def translate(self, texts, direction):
@@ -243,54 +343,63 @@ def test_translate_fills_translation_field(client, monkeypatch):
     )
 
     response = client.post(
-        f"/projects/{created['id']}/translate", json={"direction": "ko->en", "engine": "local"}
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
+        json={"direction": "ko->en", "engine": "local"},
     )
     assert response.status_code == 200
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert project["status"] == "translated"
-    assert project["segments"][0]["translation"] == "[ko->en] 안녕"
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["status"] == "translated"
+    assert item["segments"][0]["translation"] == "[ko->en] 안녕"
+
+
+def _segments_url(ctx: dict, suffix: str = "") -> str:
+    return f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/segments{suffix}"
 
 
 def test_update_segment_patches_text(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
-
-    response = client.patch(
-        f"/projects/{created['id']}/segments/s1", json={"text": "수정된 원문"}
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
     )
+
+    response = client.patch(_segments_url(ctx, "/s1"), json={"text": "수정된 원문"})
 
     assert response.status_code == 200
     assert response.json()["text"] == "수정된 원문"
 
 
 def test_update_missing_segment_returns_404(client):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
-    response = client.patch(f"/projects/{created['id']}/segments/missing", json={"text": "x"})
+    response = client.patch(_segments_url(ctx, "/missing"), json={"text": "x"})
 
     assert response.status_code == 404
 
 
 def test_update_segment_rejects_start_after_end(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=1.0, end=2.0, text="원문")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    response = client.patch(f"/projects/{created['id']}/segments/s1", json={"start": 5.0})
+    response = client.patch(_segments_url(ctx, "/s1"), json={"start": 5.0})
 
     assert response.status_code == 400
 
 
-def test_delete_segment_removes_it_from_project(client, monkeypatch):
-    created = _upload_project(client)
+def test_delete_segment_removes_it_from_item(client, monkeypatch):
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [
@@ -298,32 +407,234 @@ def test_delete_segment_removes_it_from_project(client, monkeypatch):
             Segment(id="s2", start=1.0, end=2.0, text="delete me"),
         ],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    response = client.delete(f"/projects/{created['id']}/segments/s2")
+    response = client.delete(_segments_url(ctx, "/s2"))
     assert response.status_code == 204
 
-    project = client.get(f"/projects/{created['id']}").json()
-    assert [s["id"] for s in project["segments"]] == ["s1"]
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert [s["id"] for s in item["segments"]] == ["s1"]
 
 
 def test_delete_missing_segment_returns_404(client):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
 
-    response = client.delete(f"/projects/{created['id']}/segments/missing")
+    response = client.delete(_segments_url(ctx, "/missing"))
 
     assert response.status_code == 404
 
 
+def test_split_segment_replaces_it_with_two_segments(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=10.0, text="one two three four")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(_segments_url(ctx, "/s1/split"), json={"split_at": 5.0})
+
+    assert response.status_code == 200
+    pair = response.json()
+    assert len(pair) == 2
+    assert pair[0]["end"] == pair[1]["start"] == 5.0
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert len(item["segments"]) == 2
+    assert "s1" not in [s["id"] for s in item["segments"]]
+
+
+def test_split_segment_missing_returns_404(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.post(_segments_url(ctx, "/missing/split"), json={"split_at": 1.0})
+
+    assert response.status_code == 404
+
+
+def test_split_segment_invalid_point_returns_400(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=10.0, text="one two")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(_segments_url(ctx, "/s1/split"), json={"split_at": 20.0})
+
+    assert response.status_code == 400
+
+
+def test_merge_segments_combines_them_into_one(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="hello"),
+            Segment(id="s2", start=1.0, end=2.0, text="world"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(_segments_url(ctx, "/merge"), json={"segment_ids": ["s1", "s2"]})
+
+    assert response.status_code == 200
+    merged = response.json()
+    assert merged["text"] == "hello world"
+    assert merged["start"] == 0.0
+    assert merged["end"] == 2.0
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert len(item["segments"]) == 1
+
+
+def test_merge_segments_missing_id_returns_404(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="hello")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(
+        _segments_url(ctx, "/merge"), json={"segment_ids": ["s1", "missing"]}
+    )
+
+    assert response.status_code == 404
+
+
+def test_find_replace_updates_matching_segments(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="hello world"),
+            Segment(id="s2", start=1.0, end=2.0, text="goodbye"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(
+        _segments_url(ctx, "/find-replace"),
+        json={"field": "text", "find": "world", "replace": "earth"},
+    )
+
+    assert response.status_code == 200
+    texts = [s["text"] for s in response.json()]
+    assert texts == ["hello earth", "goodbye"]
+
+
+def test_undo_restores_segment_text_before_last_update(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    client.patch(_segments_url(ctx, "/s1"), json={"text": "수정된 원문"})
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/undo")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["segments"][0]["text"] == "원문"
+    assert body["can_redo"] is True
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["segments"][0]["text"] == "원문"
+
+
+def test_redo_reapplies_undone_change(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    client.patch(_segments_url(ctx, "/s1"), json={"text": "수정된 원문"})
+    client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/undo")
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/redo")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["segments"][0]["text"] == "수정된 원문"
+    assert body["can_redo"] is False
+
+
+def test_undo_without_history_returns_400(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/undo")
+
+    assert response.status_code == 400
+
+
+def test_redo_without_history_returns_400(client):
+    ctx = _create_project_with_item(client)
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/redo")
+
+    assert response.status_code == 400
+
+
+def test_new_edit_after_undo_clears_redo_stack(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    client.patch(_segments_url(ctx, "/s1"), json={"text": "v2"})
+    client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/undo")
+    client.patch(_segments_url(ctx, "/s1"), json={"text": "v3"})
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/redo")
+
+    assert response.status_code == 400
+
+
 def test_export_srt(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    response = client.get(f"/projects/{created['id']}/export", params={"format": "srt"})
+    response = client.get(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/export", params={"format": "srt"}
+    )
 
     assert response.status_code == 200
     assert "안녕하세요" in response.text
@@ -331,28 +642,34 @@ def test_export_srt(client, monkeypatch):
 
 
 def test_review_package_download(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요", translation="Hello")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
-    response = client.get(f"/projects/{created['id']}/review-package")
+    response = client.get(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/review-package")
 
     assert response.status_code == 200
     payload = json.loads(response.text)
-    assert payload["project_id"] == created["id"]
+    assert payload["item_id"] == ctx["item_id"]
     assert payload["segments"][0]["text"] == "안녕하세요"
 
 
 def test_review_import_returns_diff(client, monkeypatch):
-    created = _upload_project(client)
+    ctx = _create_project_with_item(client)
     monkeypatch.setattr(
         "app.api.transcribe.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요", translation="Hello")],
     )
-    client.post(f"/projects/{created['id']}/transcribe", json={"model": "small"})
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
 
     corrected = {
         "segments": [
@@ -360,7 +677,7 @@ def test_review_import_returns_diff(client, monkeypatch):
         ]
     }
     response = client.post(
-        f"/projects/{created['id']}/review-import",
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/review-import",
         files={"file": ("review.json", json.dumps(corrected), "application/json")},
     )
 

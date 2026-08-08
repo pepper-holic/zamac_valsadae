@@ -12,9 +12,9 @@ ProjectStatus = Literal[
 
 TranslationDirection = Literal["ko->en", "en->ko"]
 TranslationEngine = Literal["local", "api"]
-ExportFormat = Literal["srt", "vtt", "json"]
+ExportFormat = Literal["srt", "vtt", "json", "ass", "ttml"]
 QualityFlag = Literal["good", "check"]
-ProgressStage = Literal["downloading_model", "processing"]
+ProgressStage = Literal["downloading_model", "processing", "diarizing"]
 
 
 class Segment(BaseModel):
@@ -22,18 +22,28 @@ class Segment(BaseModel):
     start: float = 0.0  # 기본값 설정으로 누락 시 에러 방지
     end: float = 0.0    # 기본값 설정으로 누락 시 에러 방지
     text: str = ""      # 기본값 설정으로 누락 시 에러 방지
+    speaker: str | None = None
     translation: str | None = None
     transcription_quality: QualityFlag | None = None
     transcription_quality_reason: str | None = None
     translation_quality: QualityFlag | None = None
     translation_quality_reason: str | None = None
+    readability_flag: QualityFlag | None = None
+    readability_reason: str | None = None
     reviewed: bool = False
 
 
-class Project(BaseModel):
+class MediaItem(BaseModel):
+    """One uploaded video/audio file and its transcription/translation state.
+
+    A Project groups multiple MediaItems (e.g. an interview series or lecture
+    set) that share a glossary and translation memory, while each item's
+    transcript, segments, and processing status stay independent.
+    """
+
     id: str
-    filename: str = ""       # 하위 호환성을 위해 기본값 추가
-    media_path: str = ""     # 하위 호환성을 위해 기본값 추가
+    filename: str = ""
+    media_path: str = ""
     status: ProjectStatus = "uploaded"
     whisper_model: str | None = None
     error: str | None = None
@@ -42,13 +52,49 @@ class Project(BaseModel):
     segments: list[Segment] = Field(default_factory=list)
 
 
+class Project(BaseModel):
+    id: str
+    name: str = ""
+    items: list[MediaItem] = Field(default_factory=list)
+    glossary: dict[str, str] = Field(default_factory=dict)
+
+
+class ProjectCreate(BaseModel):
+    name: str = ""
+
+
 class TranscribeRequest(BaseModel):
     model: str = "small"
+    diarize: bool = False
 
 
 class TranslateRequest(BaseModel):
     direction: TranslationDirection
     engine: TranslationEngine = "local"
+
+
+class GlossaryUpdate(BaseModel):
+    glossary: dict[str, str] = Field(default_factory=dict)
+
+
+class SegmentSplitRequest(BaseModel):
+    split_at: float
+
+
+class SegmentMergeRequest(BaseModel):
+    segment_ids: list[str]
+
+
+class SegmentFindReplaceRequest(BaseModel):
+    field: Literal["text", "translation"]
+    find: str
+    replace: str = ""
+
+
+class UndoRedoResult(BaseModel):
+    segments: list[Segment] = Field(default_factory=list)
+    can_undo: bool = False
+    can_redo: bool = False
 
 
 class SegmentUpdate(BaseModel):
@@ -68,7 +114,7 @@ class ReviewSegment(BaseModel):
 
 
 class ReviewPackage(BaseModel):
-    project_id: str
+    item_id: str
     media_filename: str
     instructions: str
     segments: list[ReviewSegment] = Field(default_factory=list)

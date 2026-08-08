@@ -31,6 +31,7 @@ class Settings:
     whisper_model_cache_dir: Path = WHISPER_MODEL_CACHE_DIR
     translation_api_key: str | None = os.environ.get("TRANSLATION_API_KEY")
     translation_api_base_url: str | None = os.environ.get("TRANSLATION_API_BASE_URL")
+    hf_token: str | None = os.environ.get("HF_TOKEN")
 
 
 def get_settings() -> Settings:

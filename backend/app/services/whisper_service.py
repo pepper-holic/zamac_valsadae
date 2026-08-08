@@ -123,7 +123,12 @@ def transcribe(
     # Without it, segment boundaries can drift locally (e.g. around silence,
     # music, or repeated speech) even though the overall transcript stays
     # correct.
-    raw_segments, info = active_model.transcribe(str(media_path), word_timestamps=True)
+    # vad_filter=True runs faster-whisper's built-in Silero VAD pass before
+    # decoding, skipping silent/non-speech stretches instead of wastefully
+    # decoding them - speeds up transcription with no extra dependency.
+    raw_segments, info = active_model.transcribe(
+        str(media_path), word_timestamps=True, vad_filter=True
+    )
 
     # transcribe() returns a lazy generator - progress must be derived by
     # tracking how far each yielded segment's end time is into the audio,

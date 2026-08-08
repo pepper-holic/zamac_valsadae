@@ -11,10 +11,10 @@ def make_segments() -> list[Segment]:
 
 def test_build_review_package_includes_instructions_and_segments():
     package = build_review_package(
-        project_id="p1", media_filename="video.mp4", segments=make_segments()
+        item_id="p1", media_filename="video.mp4", segments=make_segments()
     )
 
-    assert package.project_id == "p1"
+    assert package.item_id == "p1"
     assert package.media_filename == "video.mp4"
     assert len(package.segments) == 2
     assert package.instructions

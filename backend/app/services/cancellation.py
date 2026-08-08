@@ -7,16 +7,16 @@ task from a previous process is handled separately by the startup recovery
 in app.main, not by this module.
 """
 
-_cancelled_project_ids: set[str] = set()
+_cancelled_item_ids: set[str] = set()
 
 
-def request_cancel(project_id: str) -> None:
-    _cancelled_project_ids.add(project_id)
+def request_cancel(item_id: str) -> None:
+    _cancelled_item_ids.add(item_id)
 
 
-def is_cancelled(project_id: str) -> bool:
-    return project_id in _cancelled_project_ids
+def is_cancelled(item_id: str) -> bool:
+    return item_id in _cancelled_item_ids
 
 
-def clear_cancel(project_id: str) -> None:
-    _cancelled_project_ids.discard(project_id)
+def clear_cancel(item_id: str) -> None:
+    _cancelled_item_ids.discard(item_id)

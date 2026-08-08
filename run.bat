@@ -3,9 +3,16 @@ echo Starting Zamak_Valsadae server...
 set "ROOT_DIR=%~dp0"
 
 if not exist "%ROOT_DIR%runtime\python\python.exe" (
-    echo Not installed yet. Please run install.bat first.
-    pause
-    exit /b 1
+    echo First launch detected - installing the portable runtime and dependencies.
+    echo This downloads Python/Node.js/ffmpeg and installs packages ^(a few GB, one-time^).
+    echo.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%install.ps1"
+    if errorlevel 1 (
+        echo.
+        echo Install failed. See the error above, then run install.bat to retry.
+        pause
+        exit /b 1
+    )
 )
 
 (

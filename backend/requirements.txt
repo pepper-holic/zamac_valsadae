@@ -8,5 +8,9 @@ sentencepiece>=0.2
 sacremoses>=0.1
 ctranslate2>=4.4
 
+# 화자 분리(선택 기능) - HuggingFace 게이트 모델이라 사용 전 HF_TOKEN 설정과
+# https://huggingface.co/pyannote/speaker-diarization-3.1 이용약관 동의가 필요합니다.
+pyannote-audio>=3.3
+
 pytest>=8.3
 httpx>=0.27

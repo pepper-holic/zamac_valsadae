@@ -16,17 +16,21 @@ _INTERRUPTED_MESSAGE = "서버가 재시작되어 작업이 중단되었습니�
 
 def recover_interrupted_projects(store: ProjectStore) -> None:
     """Background tasks (transcribe/translate) run in-process, so a server
-    restart silently kills whatever was running - the project's status stays
+    restart silently kills whatever was running - the item's status stays
     stuck at "transcribing"/"translating" forever with no process left to
     finish it. Mark those as failed on startup so the user sees a clear
     error and can retry, instead of a progress bar that never moves again.
     """
     for project in store.list():
-        if project.status in _INTERRUPTED_STATUSES:
-            project.status = "error"
-            project.stage = None
-            project.progress = None
-            project.error = _INTERRUPTED_MESSAGE
+        changed = False
+        for item in project.items:
+            if item.status in _INTERRUPTED_STATUSES:
+                item.status = "error"
+                item.stage = None
+                item.progress = None
+                item.error = _INTERRUPTED_MESSAGE
+                changed = True
+        if changed:
             store.save(project)
 
 

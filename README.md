@@ -30,6 +30,31 @@
 
 > `install.bat`은 처음 한 번 또는 의존성이 변경되었을 때만 실행하면 됩니다.
 > `runtime/` 폴더를 지우면 다음 `install.bat` 실행 시 처음부터 다시 내려받습니다.
+> `run.bat`은 이제 `runtime/`이 없으면 install.bat 없이도 자동으로 설치를 먼저 진행합니다 —
+> 아래 설치 프로그램(`.exe`)의 바탕화면 아이콘을 눌렀을 때도 이 경로를 그대로 탑니다.
+
+## 설치 프로그램(.exe)으로 배포하기
+
+`install.bat`/`run.bat`을 직접 더블클릭하는 대신, 일반 Windows 프로그램처럼 `.exe`를 실행해
+설치하고 시작 메뉴·바탕화면 아이콘을 만들 수 있습니다. `installer/installer.iss`가 그 설치
+프로그램을 만드는 [Inno Setup](https://jrsoftware.org/isinfo.php) 스크립트입니다.
+
+- 설치 프로그램은 이 프로젝트의 소스 코드와 아이콘만 담고 있으며, Python/Node.js/ffmpeg나
+  AI 모델은 포함하지 않습니다 — 그건 설치 후 처음 실행할 때(`run.bat`이 자동으로) 인터넷에서
+  받아옵니다. 그래서 설치 파일 자체는 가볍지만, **최초 실행 시에는 인터넷 연결과 수 분~수십 분의
+  다운로드 시간**이 필요합니다.
+- 빌드 방법: Inno Setup을 설치한 뒤 `installer/installer.iss`를 열어 컴파일하거나,
+  ```powershell
+  & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\installer.iss
+  ```
+  를 실행하면 `installer/dist/Zamak_Valsadae_Setup.exe`가 생성됩니다.
+- 설치 위치는 관리자 권한이 필요 없는 `%LOCALAPPDATA%\Programs\Zamak_Valsadae`입니다.
+- **코드 서명이 되어 있지 않습니다.** 다른 사람에게 배포하면 Windows SmartScreen이
+  "Windows에서 PC를 보호했습니다" 경고를 띄웁니다 — "추가 정보" → "실행"을 눌러야 설치가
+  진행됩니다. 경고를 없애려면 유료 코드 서명 인증서가 필요합니다(이 저장소에는 포함되어 있지
+  않음).
+- 제거(언인스톨)는 설치 프로그램이 깔았던 소스 파일만 지우고, 실행 중 생성된 `runtime/`과
+  `data/`(다운로드한 모델, 프로젝트 데이터)는 그대로 남습니다 — 필요하면 수동으로 지우세요.
 
 ## 개발자용 수동 설치
 
@@ -121,6 +146,7 @@ python -m pytest
 | `CT2_MODEL_CACHE_DIR` | 번역(CTranslate2) 모델 캐시 위치. 기본값: `data/ct2models/` |
 | `WHISPER_MODEL_CACHE_DIR` | Whisper 음성 인식 모델 캐시 위치. 기본값: `data/whisper_models/` (프로젝트 로컬 — 사용자 홈 폴더가 아님) |
 | `VITE_API_BASE_URL` | 프론트엔드 개발 환경에서 사용할 백엔드 URL. `frontend/.env.development`에서 관리됩니다. |
+| `HF_TOKEN` | 화자 분리 기능(선택)에 필요. HuggingFace 토큰이며, [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 모델 이용약관에 먼저 동의해야 합니다. 설정하지 않으면 화자 분리 없이 전사만 진행됩니다. |
 
 ## 사용 흐름 요약
 

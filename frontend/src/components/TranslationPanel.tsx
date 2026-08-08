@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { Project, TranslationDirection, TranslationEngine } from '../api/types'
-import { cancelProject, getModelStatus, translateProject } from '../api/client'
+import type { MediaItem, Project, TranslationDirection, TranslationEngine } from '../api/types'
+import { cancelItem, getModelStatus, translateItem, updateGlossary } from '../api/client'
 
 type Props = {
   project: Project
-  onStarted: (project: Project) => void
+  item: MediaItem
+  onStarted: (item: MediaItem) => void
+  onGlossaryUpdated: (project: Project) => void
 }
 
-export function TranslationPanel({ project, onStarted }: Props) {
+export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }: Props) {
   const [direction, setDirection] = useState<TranslationDirection>('en->ko')
   const [engine, setEngine] = useState<TranslationEngine>('local')
   const [error, setError] = useState<string | null>(null)
   const [translationCacheStatus, setTranslationCacheStatus] = useState<Record<string, boolean>>({})
+  const [newTerm, setNewTerm] = useState('')
+  const [newTranslation, setNewTranslation] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -27,15 +31,15 @@ export function TranslationPanel({ project, onStarted }: Props) {
     }
   }, [])
 
-  const hasSegments = project.segments.length > 0
-  const isBusy = project.status === 'translating' || project.status === 'transcribing'
+  const hasSegments = item.segments.length > 0
+  const isBusy = item.status === 'translating' || item.status === 'transcribing'
   const isModelCached = translationCacheStatus[direction]
-  const isDownloadingModel = project.status === 'translating' && project.stage === 'downloading_model'
+  const isDownloadingModel = item.status === 'translating' && item.stage === 'downloading_model'
 
   async function handleTranslate() {
     setError(null)
     try {
-      const updated = await translateProject(project.id, direction, engine)
+      const updated = await translateItem(project.id, item.id, direction, engine)
       onStarted(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -45,8 +49,32 @@ export function TranslationPanel({ project, onStarted }: Props) {
   async function handleCancel() {
     setError(null)
     try {
-      const updated = await cancelProject(project.id)
+      const updated = await cancelItem(project.id, item.id)
       onStarted(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function handleAddGlossaryTerm() {
+    const term = newTerm.trim()
+    const translation = newTranslation.trim()
+    if (!term || !translation) return
+    try {
+      const updated = await updateGlossary(project.id, { ...project.glossary, [term]: translation })
+      onGlossaryUpdated(updated)
+      setNewTerm('')
+      setNewTranslation('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function handleRemoveGlossaryTerm(term: string) {
+    const { [term]: _removed, ...rest } = project.glossary
+    try {
+      const updated = await updateGlossary(project.id, rest)
+      onGlossaryUpdated(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -84,14 +112,10 @@ export function TranslationPanel({ project, onStarted }: Props) {
           disabled={!hasSegments || isBusy}
           data-tip="선택한 방향/엔진으로 번역을 시작합니다."
         >
-          {project.status === 'translating' ? '번역 중...' : '번역 시작'}
+          {item.status === 'translating' ? '번역 중...' : '번역 시작'}
         </button>
-        {project.status === 'translating' && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            data-tip="진행 중인 번역을 중단합니다."
-          >
+        {item.status === 'translating' && (
+          <button type="button" onClick={handleCancel} data-tip="진행 중인 번역을 중단합니다.">
             취소
           </button>
         )}
@@ -103,7 +127,7 @@ export function TranslationPanel({ project, onStarted }: Props) {
       {!isBusy && engine === 'local' && isModelCached && (
         <p className="hint-text">✓ 번역 모델이 이미 다운로드되어 있습니다.</p>
       )}
-      {project.status === 'translating' && isDownloadingModel && (
+      {item.status === 'translating' && isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar progress-bar-indeterminate" />
           <p className="hint-text">
@@ -112,22 +136,61 @@ export function TranslationPanel({ project, onStarted }: Props) {
           </p>
         </div>
       )}
-      {project.status === 'translating' && !isDownloadingModel && (
+      {item.status === 'translating' && !isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar">
             <div
               className="progress-bar-fill"
-              style={{ width: `${Math.round((project.progress ?? 0) * 100)}%` }}
+              style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }}
             />
           </div>
           <p className="hint-text">
-            {Math.round((project.progress ?? 0) * 100)}% 처리 중 — 문장 수에 따라 시간이 걸릴 수
+            {Math.round((item.progress ?? 0) * 100)}% 처리 중 — 문장 수에 따라 시간이 걸릴 수
             있습니다.
           </p>
         </div>
       )}
-      {project.status === 'error' && project.error && <p className="error-text">{project.error}</p>}
+      {item.status === 'error' && item.error && <p className="error-text">{item.error}</p>}
       {error && <p className="error-text">{error}</p>}
+
+      <div className="glossary-block">
+        <h3>용어집 (프로젝트 전체 공유)</h3>
+        <p className="hint-text">
+          등록한 용어는 이 프로젝트 안의 모든 파일에서 번역 결과에 항상 지정한 번역으로 강제
+          치환됩니다.
+        </p>
+        {Object.keys(project.glossary).length > 0 && (
+          <ul className="glossary-list">
+            {Object.entries(project.glossary).map(([term, translation]) => (
+              <li key={term}>
+                <span>
+                  {term} → {translation}
+                </span>
+                <button type="button" onClick={() => handleRemoveGlossaryTerm(term)}>
+                  삭제
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="panel-row">
+          <input
+            type="text"
+            placeholder="원문 용어"
+            value={newTerm}
+            onChange={(event) => setNewTerm(event.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="지정 번역"
+            value={newTranslation}
+            onChange={(event) => setNewTranslation(event.target.value)}
+          />
+          <button type="button" onClick={handleAddGlossaryTerm}>
+            추가
+          </button>
+        </div>
+      </div>
     </section>
   )
 }

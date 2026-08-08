@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
-import type { Project, ReviewImportResult } from '../api/types'
+import type { MediaItem, Project, ReviewImportResult } from '../api/types'
 import { importReviewPackage, reviewPackageUrl } from '../api/client'
 
 type Props = {
   project: Project
+  item: MediaItem
   onImported: (result: ReviewImportResult) => void
 }
 
@@ -15,7 +16,7 @@ const AI_REVIEW_PROMPT = `[역할 정의]
 
 [작업 가이드라인]
 1. JSON 포맷 및 데이터 유지:
-   - 'project_id', 'media_filename', 'instructions' 및 각 segment의 'id', 'start', 'end', 'text' 값은 절대로 수정하거나 누락하지 마세요.
+   - 'item_id', 'media_filename', 'instructions' 및 각 segment의 'id', 'start', 'end', 'text' 값은 절대로 수정하거나 누락하지 마세요.
    - 오직 'translation' 필드의 한국어 텍스트만 수정합니다.
 
 2. 자연스러운 문맥 및 뉘앙스 보정:
@@ -26,7 +27,7 @@ const AI_REVIEW_PROMPT = `[역할 정의]
    - 번역 작업 완료 후, 사용자가 바로 파일로 저장하여 업로드할 수 있도록 최종 수정된 전체 JSON 코드를 작성해 주세요.
    - 답변의 맨 마지막 줄에는 아래와 같이 최종 결과를 다운로드할 수 있는 파이썬 코드 블록이나 다운로드 가이드를 제공하거나, JSON 코드 전체를 단일 코드 블록으로 완성해 주세요.`
 
-export function ReviewPanel({ project, onImported }: Props) {
+export function ReviewPanel({ project, item, onImported }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isPromptVisible, setIsPromptVisible] = useState(false)
@@ -39,7 +40,7 @@ export function ReviewPanel({ project, onImported }: Props) {
     setIsImporting(true)
     setError(null)
     try {
-      const result = await importReviewPackage(project.id, file)
+      const result = await importReviewPackage(project.id, item.id, file)
       onImported(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -60,7 +61,7 @@ export function ReviewPanel({ project, onImported }: Props) {
     }
   }
 
-  const hasSegments = project.segments.length > 0
+  const hasSegments = item.segments.length > 0
 
   return (
     <section className="panel">
@@ -73,7 +74,7 @@ export function ReviewPanel({ project, onImported }: Props) {
         {hasSegments ? (
           <a
             className="download-button"
-            href={reviewPackageUrl(project.id)}
+            href={reviewPackageUrl(project.id, item.id)}
             download
             data-tip="문장/시간/번역이 담긴 JSON 파일을 내려받습니다. AI 챗에 올려 교정을 요청하세요."
           >

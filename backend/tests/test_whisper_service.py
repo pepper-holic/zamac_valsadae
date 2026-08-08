@@ -117,6 +117,14 @@ def test_assess_transcription_quality_good_when_all_signals_fine():
     assert reason is None
 
 
+def test_transcribe_enables_vad_filter_by_default():
+    fake_model = FakeWhisperModel([FakeRawSegment(start=0.0, end=1.0, text="x")])
+
+    transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert fake_model.received_kwargs["vad_filter"] is True
+
+
 def test_assess_transcription_quality_defaults_to_good_when_signals_missing():
     quality, reason = _assess_transcription_quality(SimpleNamespace())
     assert quality == "good"

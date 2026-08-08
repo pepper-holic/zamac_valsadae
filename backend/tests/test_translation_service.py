@@ -200,6 +200,50 @@ def test_translate_segments_quality_none_when_translator_has_no_scores():
     assert result[0].translation_quality_reason is None
 
 
+def test_translate_segments_applies_glossary_to_untranslated_source_term():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="Zamak을 소개합니다")]
+    translator = FakeTranslator({"Zamak을 소개합니다": "I'll introduce Zamak"})
+
+    result = translate_segments(
+        segments,
+        direction="ko->en",
+        translator=translator,
+        glossary={"Zamak": "Zamak Corp"},
+    )
+
+    assert result[0].translation == "I'll introduce Zamak Corp"
+
+
+def test_translate_segments_without_glossary_leaves_translation_untouched():
+    segments = [Segment(id="1", start=0.0, end=1.0, text="안녕하세요")]
+    translator = FakeTranslator({"안녕하세요": "Hello"})
+
+    result = translate_segments(segments, direction="ko->en", translator=translator, glossary=None)
+
+    assert result[0].translation == "Hello"
+
+
+def test_translate_segments_reuses_translation_memory_without_calling_translator():
+    segments = [
+        Segment(id="1", start=0.0, end=1.0, text="안녕하세요"),
+        Segment(id="2", start=1.0, end=2.0, text="처음 보는 문장"),
+    ]
+    translator = FakeTranslator({"처음 보는 문장": "A brand new sentence"})
+
+    result = translate_segments(
+        segments,
+        direction="ko->en",
+        translator=translator,
+        translation_memory={"안녕하세요": "Hello (cached)"},
+    )
+
+    assert result[0].translation == "Hello (cached)"
+    assert result[0].translation_quality == "good"
+    assert result[1].translation == "A brand new sentence"
+    # only the uncached segment should have been sent to the translator
+    assert translator.batches == [["처음 보는 문장"]]
+
+
 def test_already_in_target_language_detects_korean():
     assert _already_in_target_language("이미 한국어입니다", "ko") is True
     assert _already_in_target_language("Hello there", "ko") is False

@@ -208,6 +208,19 @@ class TranslationCancelled(Exception):
     """Raised mid-translate when the caller's should_cancel() reports True."""
 
 
+def _apply_glossary(text: str, glossary: dict[str, str]) -> str:
+    """Best-effort glossary enforcement: if a registered source term slipped
+    through untranslated (common for names/jargon local models don't know),
+    replace it with the project's chosen translation. This cannot force a
+    model to phrase things a specific way when it *did* translate the term,
+    only patch the common case where it left the term as-is.
+    """
+    for source_term, target_term in glossary.items():
+        if source_term:
+            text = text.replace(source_term, target_term)
+    return text
+
+
 def translate_segments(
     segments: list[Segment],
     direction: TranslationDirection,
@@ -215,6 +228,8 @@ def translate_segments(
     on_progress: Callable[[float], None] | None = None,
     batch_size: int = 8,
     should_cancel: Callable[[], bool] | None = None,
+    glossary: dict[str, str] | None = None,
+    translation_memory: dict[str, str] | None = None,
 ) -> list[Segment]:
     if not segments:
         return []
@@ -224,10 +239,16 @@ def translate_segments(
     updated: list[Segment | None] = [None] * total
     pending_indices: list[int] = []
     pending_segments: list[Segment] = []
+    tm = translation_memory or {}
 
     for index, segment in enumerate(segments):
         if _already_in_target_language(segment.text, target_lang):
             updated[index] = segment.model_copy(update={"translation": segment.text})
+        elif segment.text in tm:
+            # 이전에 같은 원문을 번역한 적이 있으면 모델 호출 없이 재사용합니다.
+            updated[index] = segment.model_copy(
+                update={"translation": tm[segment.text], "translation_quality": "good"}
+            )
         else:
             pending_indices.append(index)
             pending_segments.append(segment)
@@ -252,6 +273,8 @@ def translate_segments(
             translations = translator.translate(batch_texts, direction)
             scores = [None] * len(translations)
         for index, translation, score in zip(batch_indices, translations, scores):
+            if glossary:
+                translation = _apply_glossary(translation, glossary)
             translations_by_index[index] = translation
             scores_by_index[index] = score
         done_count += len(batch)

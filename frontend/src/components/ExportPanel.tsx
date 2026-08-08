@@ -1,17 +1,18 @@
 import { useState } from 'react'
-import type { ExportFormat, Project } from '../api/types'
+import type { ExportFormat, MediaItem, Project } from '../api/types'
 import { exportUrl } from '../api/client'
 
 type Props = {
   project: Project
+  item: MediaItem
 }
 
-export function ExportPanel({ project }: Props) {
+export function ExportPanel({ project, item }: Props) {
   const [format, setFormat] = useState<ExportFormat>('srt')
   const [useTranslation, setUseTranslation] = useState(false)
 
-  const hasSegments = project.segments.length > 0
-  const hasTranslations = project.segments.some((segment) => segment.translation)
+  const hasSegments = item.segments.length > 0
+  const hasTranslations = item.segments.some((segment) => segment.translation)
 
   return (
     <section className="panel">
@@ -22,11 +23,13 @@ export function ExportPanel({ project }: Props) {
           id="export-format"
           value={format}
           onChange={(event) => setFormat(event.target.value as ExportFormat)}
-          data-tip="SRT/VTT는 자막 파일, JSON은 시간/원문/번역이 모두 담긴 원본 데이터입니다."
+          data-tip="SRT/VTT/ASS는 일반 자막 파일, TTML은 방송/OTT 납품용 표준 포맷, JSON은 시간/원문/번역이 모두 담긴 원본 데이터입니다."
         >
           <option value="srt">SRT</option>
           <option value="vtt">VTT</option>
           <option value="json">JSON</option>
+          <option value="ass">ASS</option>
+          <option value="ttml">TTML</option>
         </select>
         {format !== 'json' && (
           <label
@@ -45,7 +48,7 @@ export function ExportPanel({ project }: Props) {
         {hasSegments ? (
           <a
             className="download-button"
-            href={exportUrl(project.id, format, useTranslation)}
+            href={exportUrl(project.id, item.id, format, useTranslation)}
             download
             data-tip="선택한 형식으로 파일을 내려받습니다."
           >

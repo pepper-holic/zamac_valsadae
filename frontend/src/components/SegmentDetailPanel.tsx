@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import type { Project, ReviewDiffEntry, Segment } from '../api/types'
+import type { MediaItem, Project, ReviewDiffEntry, Segment } from '../api/types'
 import { deleteSegment, updateSegment } from '../api/client'
 import { formatTimestamp, parseTimestamp } from '../utils/time'
 
 type Props = {
   project: Project
+  item: MediaItem
   segment: Segment | null
   segmentPosition: string
   currentTime: number
@@ -16,6 +17,7 @@ type Props = {
   onPlaySegment: () => void
   onAcceptDiff: (diff: ReviewDiffEntry) => void
   onRejectDiff: (diff: ReviewDiffEntry) => void
+  onSplitSegment: (splitAt: number) => Promise<void>
 }
 
 type EditableField = 'start' | 'end' | 'text' | 'translation'
@@ -31,6 +33,7 @@ const SAVED_FLASH_MS = 1500
 
 export function SegmentDetailPanel({
   project,
+  item,
   segment,
   segmentPosition,
   currentTime,
@@ -42,10 +45,12 @@ export function SegmentDetailPanel({
   onPlaySegment,
   onAcceptDiff,
   onRejectDiff,
+  onSplitSegment,
 }: Props) {
   const [isSaving, setIsSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isSplitting, setIsSplitting] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   if (!segment) {
@@ -68,7 +73,7 @@ export function SegmentDetailPanel({
     setIsSaving(true)
     setError(null)
     try {
-      const updated = await updateSegment(project.id, segment.id, { [field]: value })
+      const updated = await updateSegment(project.id, item.id, segment.id, { [field]: value })
       onSegmentSaved(updated as Segment)
       setJustSaved(true)
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
@@ -80,16 +85,29 @@ export function SegmentDetailPanel({
     }
   }
 
+  async function handleSplit() {
+    if (!segment) return
+    setIsSplitting(true)
+    setError(null)
+    try {
+      await onSplitSegment(currentTime)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsSplitting(false)
+    }
+  }
+
   async function handleDelete() {
     if (!segment) return
     if (!window.confirm('이 문장을 삭제할까요? 되돌릴 수 없습니다.')) return
-    await deleteSegment(project.id, segment.id)
+    await deleteSegment(project.id, item.id, segment.id)
     onSegmentDeleted(segment.id)
   }
 
   async function handleToggleReviewed() {
     if (!segment) return
-    const updated = await updateSegment(project.id, segment.id, { reviewed: !segment.reviewed })
+    const updated = await updateSegment(project.id, item.id, segment.id, { reviewed: !segment.reviewed })
     onSegmentSaved(updated as Segment)
   }
 
@@ -189,6 +207,14 @@ export function SegmentDetailPanel({
             data-tip="시작 지점부터 재생을 시작합니다."
           >
             이 구간 재생
+          </button>
+          <button
+            type="button"
+            onClick={handleSplit}
+            disabled={isSplitting || currentTime <= segment.start || currentTime >= segment.end}
+            data-tip="현재 재생 위치를 기준으로 이 문장을 둘로 나눕니다. 재생 위치가 문장 구간 안에 있어야 합니다."
+          >
+            {isSplitting ? '분할 중...' : '현재 위치에서 분할'}
           </button>
           <button
             type="button"

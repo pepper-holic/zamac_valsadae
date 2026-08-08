@@ -11,10 +11,10 @@ _DIFF_FIELDS = ("text", "translation", "start", "end")
 
 
 def build_review_package(
-    project_id: str, media_filename: str, segments: list[Segment]
+    item_id: str, media_filename: str, segments: list[Segment]
 ) -> ReviewPackage:
     return ReviewPackage(
-        project_id=project_id,
+        item_id=item_id,
         media_filename=media_filename,
         instructions=REVIEW_INSTRUCTIONS,
         segments=[

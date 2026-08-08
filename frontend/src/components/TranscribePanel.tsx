@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
-import type { Project } from '../api/types'
+import type { MediaItem, Project } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
-import { cancelProject, getModelStatus, transcribeProject } from '../api/client'
+import { cancelItem, getModelStatus, transcribeItem } from '../api/client'
 
 type Props = {
   project: Project
-  onStarted: (project: Project) => void
+  item: MediaItem
+  onStarted: (item: MediaItem) => void
 }
 
-const isBusy = (status: Project['status']) => status === 'transcribing' || status === 'translating'
+const isBusy = (status: MediaItem['status']) => status === 'transcribing' || status === 'translating'
 
 const MODEL_NOTES: Record<string, string> = {
   tiny: '매우 빠름 · 정확도 낮음 — 빠른 테스트용',
@@ -20,8 +21,9 @@ const MODEL_NOTES: Record<string, string> = {
   'large-v3': '매우 느림(CPU) · 정확도 최고',
 }
 
-export function TranscribePanel({ project, onStarted }: Props) {
-  const [model, setModel] = useState(project.whisper_model ?? 'small')
+export function TranscribePanel({ project, item, onStarted }: Props) {
+  const [model, setModel] = useState(item.whisper_model ?? 'small')
+  const [diarize, setDiarize] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [whisperCacheStatus, setWhisperCacheStatus] = useState<Record<string, boolean>>({})
 
@@ -40,12 +42,12 @@ export function TranscribePanel({ project, onStarted }: Props) {
   }, [])
 
   const isModelCached = whisperCacheStatus[model]
-  const isDownloadingModel = project.status === 'transcribing' && project.stage === 'downloading_model'
+  const isDownloadingModel = item.status === 'transcribing' && item.stage === 'downloading_model'
 
   async function handleTranscribe() {
     setError(null)
     try {
-      const updated = await transcribeProject(project.id, model)
+      const updated = await transcribeItem(project.id, item.id, model, diarize)
       onStarted(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -55,7 +57,7 @@ export function TranscribePanel({ project, onStarted }: Props) {
   async function handleCancel() {
     setError(null)
     try {
-      const updated = await cancelProject(project.id)
+      const updated = await cancelItem(project.id, item.id)
       onStarted(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -71,7 +73,7 @@ export function TranscribePanel({ project, onStarted }: Props) {
           id="model-select"
           value={model}
           onChange={(event) => setModel(event.target.value)}
-          disabled={isBusy(project.status)}
+          disabled={isBusy(item.status)}
           data-tip="클수록 정확하지만 GPU 없이는 훨씬 느려집니다. small을 기본으로 추천합니다."
         >
           {WHISPER_MODELS.map((size) => (
@@ -80,32 +82,40 @@ export function TranscribePanel({ project, onStarted }: Props) {
             </option>
           ))}
         </select>
+        <label
+          className="checkbox-label"
+          data-tip="누가 말했는지 화자 라벨을 붙입니다. HuggingFace 토큰(HF_TOKEN) 설정과 최초 1회 모델 다운로드가 필요하며, 처리 시간이 더 걸립니다."
+        >
+          <input
+            type="checkbox"
+            checked={diarize}
+            disabled={isBusy(item.status)}
+            onChange={(event) => setDiarize(event.target.checked)}
+          />
+          화자 분리
+        </label>
         <button
           type="button"
           onClick={handleTranscribe}
-          disabled={isBusy(project.status)}
+          disabled={isBusy(item.status)}
           data-tip="선택한 모델로 음성 인식을 시작합니다."
         >
-          {project.status === 'transcribing' ? '전사 중...' : '전사 시작'}
+          {item.status === 'transcribing' ? '전사 중...' : '전사 시작'}
         </button>
-        {project.status === 'transcribing' && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            data-tip="진행 중인 전사를 중단합니다."
-          >
+        {item.status === 'transcribing' && (
+          <button type="button" onClick={handleCancel} data-tip="진행 중인 전사를 중단합니다.">
             취소
           </button>
         )}
       </div>
       <p className="hint-text">{MODEL_NOTES[model]}</p>
-      {!isBusy(project.status) && whisperCacheStatus[model] === false && (
+      {!isBusy(item.status) && whisperCacheStatus[model] === false && (
         <p className="hint-text">⬇ 이 모델은 아직 다운로드되지 않았습니다. 전사 시작 시 최초 1회 자동으로 다운로드됩니다.</p>
       )}
-      {!isBusy(project.status) && isModelCached && (
+      {!isBusy(item.status) && isModelCached && (
         <p className="hint-text">✓ 모델이 이미 다운로드되어 있습니다.</p>
       )}
-      {project.status === 'transcribing' && isDownloadingModel && (
+      {item.status === 'transcribing' && isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar progress-bar-indeterminate" />
           <p className="hint-text">
@@ -114,21 +124,21 @@ export function TranscribePanel({ project, onStarted }: Props) {
           </p>
         </div>
       )}
-      {project.status === 'transcribing' && !isDownloadingModel && (
+      {item.status === 'transcribing' && !isDownloadingModel && (
         <div className="progress-block">
           <div className="progress-bar">
             <div
               className="progress-bar-fill"
-              style={{ width: `${Math.round((project.progress ?? 0) * 100)}%` }}
+              style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }}
             />
           </div>
           <p className="hint-text">
-            {Math.round((project.progress ?? 0) * 100)}% 처리 중 — 모델을 로드하고 음성을 인식하는
+            {Math.round((item.progress ?? 0) * 100)}% 처리 중 — 모델을 로드하고 음성을 인식하는
             중입니다. 모델 크기에 따라 수 분이 걸릴 수 있습니다.
           </p>
         </div>
       )}
-      {project.status === 'error' && project.error && <p className="error-text">{project.error}</p>}
+      {item.status === 'error' && item.error && <p className="error-text">{item.error}</p>}
       {error && <p className="error-text">{error}</p>}
     </section>
   )

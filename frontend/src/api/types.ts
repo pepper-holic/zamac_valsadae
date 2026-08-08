@@ -8,26 +8,29 @@ export type ProjectStatus =
 
 export type TranslationDirection = 'ko->en' | 'en->ko'
 export type TranslationEngine = 'local' | 'api'
-export type ExportFormat = 'srt' | 'vtt' | 'json'
+export type ExportFormat = 'srt' | 'vtt' | 'json' | 'ass' | 'ttml'
 
 export type QualityFlag = 'good' | 'check'
 
-export type ProgressStage = 'downloading_model' | 'processing'
+export type ProgressStage = 'downloading_model' | 'processing' | 'diarizing'
 
 export interface Segment {
   id: string
   start: number
   end: number
   text: string
+  speaker: string | null
   translation: string | null
   transcription_quality: QualityFlag | null
   transcription_quality_reason: string | null
   translation_quality: QualityFlag | null
   translation_quality_reason: string | null
+  readability_flag: QualityFlag | null
+  readability_reason: string | null
   reviewed: boolean
 }
 
-export interface Project {
+export interface MediaItem {
   id: string
   filename: string
   media_path: string
@@ -37,6 +40,13 @@ export interface Project {
   progress: number | null
   stage: ProgressStage | null
   segments: Segment[]
+}
+
+export interface Project {
+  id: string
+  name: string
+  items: MediaItem[]
+  glossary: Record<string, string>
 }
 
 export interface ReviewDiffEntry {
@@ -54,6 +64,12 @@ export interface ReviewImportResult {
 export interface ModelStatus {
   whisper: Record<string, boolean>
   translation: Record<string, boolean>
+}
+
+export interface UndoRedoResult {
+  segments: Segment[]
+  can_undo: boolean
+  can_redo: boolean
 }
 
 export const WHISPER_MODELS = [
