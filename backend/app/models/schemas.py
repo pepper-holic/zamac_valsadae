@@ -96,6 +96,7 @@ class ProjectCreate(BaseModel):
 
 class RenderRequest(BaseModel):
     use_translation: bool = False
+    cut_deleted: bool = False
 
 
 class TranscribeRequest(BaseModel):

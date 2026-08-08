@@ -824,6 +824,75 @@ def test_render_starts_and_marks_item_rendered(client, monkeypatch):
     assert item["progress"] == 1.0
 
 
+def test_render_with_cut_deleted_passes_cut_list_and_uses_kept_duration(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="one"),
+            Segment(id="s2", start=3.0, end=5.0, text="two"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    monkeypatch.setattr(
+        "app.api.export.render_service.probe_duration_seconds", lambda *a, **k: 10.0
+    )
+
+    captured = {}
+
+    def fake_render(**kwargs):
+        captured.update(kwargs)
+        kwargs["on_progress"](1.0)
+
+    monkeypatch.setattr("app.api.export.render_service.render", fake_render)
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render",
+        json={"cut_deleted": True},
+    )
+
+    assert response.status_code == 200
+    assert captured["cut_list"] == [(0.0, 1.0), (3.0, 5.0)]
+    assert captured["duration_seconds"] == pytest.approx(3.0)
+
+
+def test_render_without_cut_deleted_uses_full_duration_and_no_cut_list(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="one"),
+            Segment(id="s2", start=3.0, end=5.0, text="two"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    monkeypatch.setattr(
+        "app.api.export.render_service.probe_duration_seconds", lambda *a, **k: 10.0
+    )
+
+    captured = {}
+
+    def fake_render(**kwargs):
+        captured.update(kwargs)
+        kwargs["on_progress"](1.0)
+
+    monkeypatch.setattr("app.api.export.render_service.render", fake_render)
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/render", json={}
+    )
+
+    assert response.status_code == 200
+    assert captured["cut_list"] is None
+    assert captured["duration_seconds"] == pytest.approx(10.0)
+
+
 def test_render_without_segments_returns_400(client):
     ctx = _create_project_with_item(client)
 

@@ -14,6 +14,7 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
   const [format, setFormat] = useState<ExportFormat>('srt')
   const [useTranslation, setUseTranslation] = useState(false)
   const [renderUseTranslation, setRenderUseTranslation] = useState(false)
+  const [cutDeleted, setCutDeleted] = useState(false)
   const [isStartingRender, setIsStartingRender] = useState(false)
   const [isCancellingRender, setIsCancellingRender] = useState(false)
 
@@ -25,7 +26,7 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
   async function handleRender() {
     setIsStartingRender(true)
     try {
-      const updated = await renderItem(project.id, item.id, renderUseTranslation)
+      const updated = await renderItem(project.id, item.id, renderUseTranslation, cutDeleted)
       onItemUpdated(updated)
     } finally {
       setIsStartingRender(false)
@@ -99,6 +100,17 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
             onChange={(event) => setRenderUseTranslation(event.target.checked)}
           />
           번역문 사용
+        </label>
+        <label
+          className="checkbox-label"
+          data-tip="켜면 문장 목록에 남아있지 않은 구간(삭제한 문장뿐 아니라 문장 사이의 무음 구간 포함)을 최종 영상에서 함께 잘라냅니다. 끄면 자막만 빠지고 영상은 원본 길이 그대로 유지됩니다."
+        >
+          <input
+            type="checkbox"
+            checked={cutDeleted}
+            onChange={(event) => setCutDeleted(event.target.checked)}
+          />
+          삭제된 구간도 영상에서 잘라내기
         </label>
         <button
           type="button"

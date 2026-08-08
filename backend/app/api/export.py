@@ -38,16 +38,23 @@ def _get_project_and_item(
 
 
 def _run_render(
-    project_id: str, item_id: str, use_translation: bool, store: ProjectStore
+    project_id: str, item_id: str, use_translation: bool, cut_deleted: bool, store: ProjectStore
 ) -> None:
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
     ass_path = store.render_ass_path(project_id, item_id)
     output_path = store.rendered_media_path(project_id, item_id)
     try:
-        duration = render_service.probe_duration_seconds(Path(item.media_path))
+        cut_list = render_service.build_cut_list(item.segments) if cut_deleted else None
+        if cut_list is not None:
+            duration = sum(end - start for start, end in cut_list)
+        else:
+            duration = render_service.probe_duration_seconds(Path(item.media_path))
         ass_content = render_service.build_ass(
-            item.segments, project.subtitle_style, use_translation=use_translation
+            item.segments,
+            project.subtitle_style,
+            use_translation=use_translation,
+            cut_list=cut_list,
         )
         ass_path.write_text(ass_content, encoding="utf-8")
         render_service.render(
@@ -57,6 +64,7 @@ def _run_render(
             duration_seconds=duration,
             on_progress=make_progress_reporter(project, item, store),
             should_cancel=lambda: cancellation.is_cancelled(item_id),
+            cut_list=cut_list,
         )
         item.rendered_path = str(output_path)
         item.status = "rendered"
@@ -99,7 +107,7 @@ async def render_item(
     store.save(project)
 
     background_tasks.add_task(
-        _run_render, project_id, item_id, request.use_translation, store
+        _run_render, project_id, item_id, request.use_translation, request.cut_deleted, store
     )
     return item
 

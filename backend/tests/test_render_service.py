@@ -109,6 +109,57 @@ def test_build_ass_karaoke_falls_back_to_equal_split_when_words_absent():
     assert "{\\k100}two" in ass
 
 
+def test_build_cut_list_returns_each_segment_range_sorted_by_start():
+    segments = [
+        _segment(text="b", start=5.0, end=6.0),
+        _segment(text="a", start=0.0, end=2.0),
+    ]
+
+    cut_list = render_service.build_cut_list(segments)
+
+    assert cut_list == [(0.0, 2.0), (5.0, 6.0)]
+
+
+def test_build_cut_list_merges_touching_ranges():
+    segments = [
+        _segment(text="a", start=0.0, end=2.0),
+        _segment(text="b", start=2.0, end=4.0),
+    ]
+
+    cut_list = render_service.build_cut_list(segments)
+
+    assert cut_list == [(0.0, 4.0)]
+
+
+def test_build_cut_list_empty_for_no_segments():
+    assert render_service.build_cut_list([]) == []
+
+
+def test_build_ass_remaps_timestamps_to_output_timeline_when_cut_list_given():
+    segment = _segment(text="kept after gap", start=6.0, end=8.0)
+    cut_list = [(0.0, 3.0), (6.0, 9.0)]
+
+    ass = render_service.build_ass(
+        [segment], SubtitleStyle(), cut_list=cut_list
+    )
+
+    # 원본 6.0-8.0초 구간은 (0-3초, 6-9초) 컷 목록에서 두 번째 구간에 속하며,
+    # 첫 번째 유지 구간 길이(3초)만큼 앞당겨져 출력 타임라인에서는 3.0-5.0초.
+    assert "Dialogue: 0,0:00:03.00,0:00:05.00,Default" in ass
+
+
+def test_build_ass_empty_cut_list_falls_back_to_original_timestamps():
+    ass = render_service.build_ass([_segment(start=6.0, end=8.0)], SubtitleStyle(), cut_list=[])
+
+    assert "Dialogue: 0,0:00:06.00,0:00:08.00,Default" in ass
+
+
+def test_build_ass_without_cut_list_uses_original_timestamps():
+    ass = render_service.build_ass([_segment(start=6.0, end=8.0)], SubtitleStyle())
+
+    assert "Dialogue: 0,0:00:06.00,0:00:08.00,Default" in ass
+
+
 def test_build_ass_karaoke_ignores_words_when_rendering_translation_text():
     segment = _segment(text="hello", start=0.0, end=2.0).model_copy(
         update={
@@ -210,3 +261,64 @@ def test_render_cancels_when_should_cancel_returns_true(monkeypatch, tmp_path):
             should_cancel=lambda: True,
         )
     assert fake.terminated
+
+
+def test_build_cut_filter_complex_trims_and_concats_each_kept_range():
+    filter_complex = render_service._build_cut_filter_complex(
+        [(0.0, 3.0), (6.0, 9.0)], "styled.ass"
+    )
+
+    assert "[0:v]trim=start=0.0:end=3.0,setpts=PTS-STARTPTS[v0]" in filter_complex
+    assert "[0:a]atrim=start=0.0:end=3.0,asetpts=PTS-STARTPTS[a0]" in filter_complex
+    assert "[0:v]trim=start=6.0:end=9.0,setpts=PTS-STARTPTS[v1]" in filter_complex
+    assert "[0:a]atrim=start=6.0:end=9.0,asetpts=PTS-STARTPTS[a1]" in filter_complex
+    assert "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vcat][acat]" in filter_complex
+    assert "[vcat]ass=styled.ass[vout]" in filter_complex
+
+
+def test_render_uses_filter_complex_when_cut_list_given(monkeypatch, tmp_path):
+    fake = _FakeProcess(["time=00:00:01.00 x\n"])
+    captured_command = {}
+
+    def fake_popen(command, **kwargs):
+        captured_command["command"] = command
+        return fake
+
+    monkeypatch.setattr(render_service.subprocess, "Popen", fake_popen)
+
+    render_service.render(
+        media_path=tmp_path / "in.mp4",
+        ass_path=tmp_path / "styled.ass",
+        output_path=tmp_path / "out.mp4",
+        duration_seconds=1.0,
+        cut_list=[(0.0, 1.0)],
+    )
+
+    command = captured_command["command"]
+    assert "-filter_complex" in command
+    assert "-map" in command
+    assert "[vout]" in command
+    assert "[acat]" in command
+    assert "-vf" not in command
+
+
+def test_render_uses_simple_vf_when_no_cut_list(monkeypatch, tmp_path):
+    fake = _FakeProcess(["time=00:00:01.00 x\n"])
+    captured_command = {}
+
+    def fake_popen(command, **kwargs):
+        captured_command["command"] = command
+        return fake
+
+    monkeypatch.setattr(render_service.subprocess, "Popen", fake_popen)
+
+    render_service.render(
+        media_path=tmp_path / "in.mp4",
+        ass_path=tmp_path / "styled.ass",
+        output_path=tmp_path / "out.mp4",
+        duration_seconds=1.0,
+    )
+
+    command = captured_command["command"]
+    assert "-vf" in command
+    assert "-filter_complex" not in command

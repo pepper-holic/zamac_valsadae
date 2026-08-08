@@ -275,11 +275,12 @@ export async function renderItem(
   projectId: string,
   itemId: string,
   useTranslation: boolean,
+  cutDeleted: boolean = false,
 ): Promise<MediaItem> {
   const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/render`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ use_translation: useTranslation }),
+    body: JSON.stringify({ use_translation: useTranslation, cut_deleted: cutDeleted }),
   })
   return parseOrThrow<MediaItem>(response)
 }

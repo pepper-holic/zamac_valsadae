@@ -54,7 +54,58 @@ def _karaoke_text(segment: Segment, text: str, duration_seconds: float) -> str:
     return "".join(f"{{\\k{per_word_cs}}}{word} " for word in words).strip()
 
 
-def build_ass(segments: list[Segment], style: SubtitleStyle, use_translation: bool = False) -> str:
+def build_cut_list(segments: list[Segment]) -> list[tuple[float, float]]:
+    """삭제되지 않고 남아있는 세그먼트들의 (start, end) 구간을 시간순으로 정렬해 반환.
+
+    삭제=컷 정책: 세그먼트 목록에서 완전히 제거된 구간은 그대로 잘려나가고,
+    남은 세그먼트들의 시간 구간만 이어붙여집니다(맞닿은 구간은 하나로 병합).
+    """
+    ranges = sorted((segment.start, segment.end) for segment in segments if segment.end > segment.start)
+
+    merged: list[list[float]] = []
+    for start, end in ranges:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(start, end) for start, end in merged]
+
+
+def _remap_time_for_cuts(time: float, cut_list: list[tuple[float, float]]) -> float:
+    """원본 타임라인의 시각을 컷 목록 적용 후 출력 타임라인의 시각으로 변환."""
+    output_time = 0.0
+    for start, end in cut_list:
+        if time <= start:
+            return output_time
+        if time < end:
+            return output_time + (time - start)
+        output_time += end - start
+    return output_time
+
+
+def _build_cut_filter_complex(cut_list: list[tuple[float, float]], ass_filename: str) -> str:
+    # 유지 구간마다 trim/atrim 필터 쌍이 하나씩 생기므로, 구간 수가 매우 많아지면
+    # (예: 문장이 매우 잘게 쪼개진 긴 영상) filter_complex 문자열과 명령줄 길이가
+    # 함께 커집니다. Windows의 명령줄 길이 제한(~32K자)을 실무에서 넘길 정도로
+    # 큰 편집은 아직 없었지만, 향후 문제가 되면 구간을 청크로 나눠 여러 단계로
+    # 렌더링하거나 select/aselect 기반 필터로 교체하는 것을 검토해야 합니다.
+    parts = []
+    concat_inputs = []
+    for index, (start, end) in enumerate(cut_list):
+        parts.append(f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[v{index}]")
+        parts.append(f"[0:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS[a{index}]")
+        concat_inputs.append(f"[v{index}][a{index}]")
+    parts.append(f"{''.join(concat_inputs)}concat=n={len(cut_list)}:v=1:a=1[vcat][acat]")
+    parts.append(f"[vcat]ass={ass_filename}[vout]")
+    return ";".join(parts)
+
+
+def build_ass(
+    segments: list[Segment],
+    style: SubtitleStyle,
+    use_translation: bool = False,
+    cut_list: list[tuple[float, float]] | None = None,
+) -> str:
     alignment = _alignment_for(style.position)
     bold = 1 if style.font_weight == "bold" else 0
     primary = _hex_to_ass_color(style.color)
@@ -90,8 +141,12 @@ def build_ass(segments: list[Segment], style: SubtitleStyle, use_translation: bo
         text = pick_text(segment, use_translation)
         if not text:
             continue
-        start = format_ass_timestamp(segment.start)
-        end = format_ass_timestamp(segment.end)
+        if cut_list:
+            start = format_ass_timestamp(_remap_time_for_cuts(segment.start, cut_list))
+            end = format_ass_timestamp(_remap_time_for_cuts(segment.end, cut_list))
+        else:
+            start = format_ass_timestamp(segment.start)
+            end = format_ass_timestamp(segment.end)
         override = ""
         if style.fade_in_ms > 0 or style.fade_out_ms > 0:
             override = f"{{\\fad({style.fade_in_ms},{style.fade_out_ms})}}"
@@ -139,6 +194,7 @@ def render(
     duration_seconds: float,
     on_progress: ProgressCallback | None = None,
     should_cancel: CancelCallback | None = None,
+    cut_list: list[tuple[float, float]] | None = None,
 ) -> None:
     ffmpeg_path = get_settings().ffmpeg_path
     # ffmpeg's ass filter argument is parsed by libavfilter's own escaping
@@ -146,15 +202,32 @@ def render(
     # colon (C:\...) breaks that parser even when backslash-escaped. Running
     # ffmpeg with cwd set to the .ass file's directory lets us pass just its
     # filename, sidestepping the escaping problem entirely.
-    command = [
-        str(Path(ffmpeg_path).resolve()) if Path(ffmpeg_path).is_file() else ffmpeg_path,
-        "-y",
-        "-i",
-        str(media_path.resolve()),
-        "-vf",
-        f"ass={ass_path.name}",
-        str(output_path.resolve()),
-    ]
+    ffmpeg_binary = str(Path(ffmpeg_path).resolve()) if Path(ffmpeg_path).is_file() else ffmpeg_path
+    if cut_list:
+        filter_complex = _build_cut_filter_complex(cut_list, ass_path.name)
+        command = [
+            ffmpeg_binary,
+            "-y",
+            "-i",
+            str(media_path.resolve()),
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[vout]",
+            "-map",
+            "[acat]",
+            str(output_path.resolve()),
+        ]
+    else:
+        command = [
+            ffmpeg_binary,
+            "-y",
+            "-i",
+            str(media_path.resolve()),
+            "-vf",
+            f"ass={ass_path.name}",
+            str(output_path.resolve()),
+        ]
 
     process = subprocess.Popen(
         command,
