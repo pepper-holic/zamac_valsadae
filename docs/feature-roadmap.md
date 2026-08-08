@@ -302,3 +302,134 @@ Subtitle Edit/Aegisub/Descript 등 외부 툴 조사 결과를 바탕으로, "�
 2. **자막 스타일 편집기(#16)** — 차별화 핵심 기능, 미리보기까지 완성.
 3. **자막 번인 렌더링(#17)** — 16번 완료 후 착수(스타일 스키마 의존).
 4. **온보딩/진행률 UX(#18)** — 병렬 진행 가능, 일정 여유 있을 때.
+
+---
+
+## 19~22. 경쟁 툴 벤치마킹 + 전사 속도 개선 (2026-08-09 추가)
+
+Vrew / Subtitle Edit / Aegisub / Descript / CapCut·VEED·Kapwing / Maestra·Happy Scribe를
+웹 리서치로 조사한 결과를 바탕으로 뽑은 항목입니다. 시각/디자인 관련 항목(스타일 프리셋
+갤러리 UI, DESIGN.md, 다크모드 톤 등)은 별도 디자인 산출물(Claude Design 경로 전달 예정)을
+반영해 진행하기로 하고, 이 섹션은 **기능적 개발 사항만** 다룹니다.
+
+| # | 기능 | 임팩트 | 난이도 | 참고 벤치마크 | 상태 |
+|---|---|---|---|---|---|
+| **19** | **Whisper `large-v3-turbo` 모델 옵션 추가 (최우선)** | 높음 | **매우 낮음** | faster-whisper/CTranslate2 자체 지원 | [x] 완료 (2026-08-09) |
+| 20 | 필러워드/무음 구간 자동 감지·일괄 제거 | 높음 | 낮음 | Vrew, Descript | [ ] 미착수 |
+| 21 | 단어별(word-level) 타임스탬프 저장 | 중간(기반 작업) | 중간 | Vrew, Aegisub 카라오케 | [ ] 미착수 |
+| 22 | 텍스트 삭제 시 영상도 함께 잘리는 컷 편집 | 높음(차별화) | 높음 | Vrew, Descript | [ ] 미착수 |
+
+### 19. Whisper `large-v3-turbo` 모델 옵션 추가 (최우선)
+
+**목표**: 전사 속도 개선을 웹 리서치한 결과, 지금 쓰는 faster-whisper(CTranslate2) 파이프라인을
+그대로 유지한 채 모델 크기만 `large-v3-turbo`로 추가하면 **large-v3 대비 약 5배 빠르면서
+정확도(WER)는 0.3%p 정도만 낮아지는** 것으로 확인됨. 디코더가 32층→4층으로 줄어든 구조라
+속도가 크게 개선되지만 여전히 같은 Whisper 계열이라 한국어를 포함한 다국어 지원은 그대로
+유지됨. 이미 `_COMPUTE_TYPE = "int8"`, 전체 CPU 스레드 사용 등 CTranslate2 쪽 최적화는
+되어 있으므로, 남은 레버는 모델 자체 선택뿐 — 코드 변경이 거의 없어 최우선으로 처리.
+
+**변경 범위**
+- `backend/app/core/config.py`: `WHISPER_MODEL_SIZES` 튜플에 `"large-v3-turbo"` 추가.
+  faster-whisper의 `download_model()`이 이 모델명을 이미 인식해서 맞는 CTranslate2 변환
+  체크포인트를 자동으로 받아오므로 `whisper_service.py` 쪽은 수정 불필요.
+- `frontend/src/api/types.ts`: `WHISPER_MODELS` 배열에 `'large-v3-turbo'` 추가해 모델 선택
+  드롭다운에 노출.
+
+**주의점**: distil-whisper(영어 전용이라 한국어 미지원)나 NVIDIA Parakeet(한국어 지원
+불확실, 엔진 전체 교체 필요)는 리서치 결과 이번 스코프에서 제외 — turbo가 "코드 변경
+최소 + 한국어 유지 + 확실한 속도 향상"을 모두 만족하는 유일한 선택지였음.
+
+**테스트**: `backend/tests/test_whisper_service.py`(또는 `test_api.py`의 모델 검증 테스트)에
+`"large-v3-turbo"`가 `WHISPER_MODEL_SIZES`에 포함되어 허용되는지, `/models/status`가 이
+모델의 캐시 상태를 정상적으로 반환하는지 검증하는 케이스 추가.
+
+### 20. 필러워드/무음 구간 자동 감지·일괄 제거
+
+**목표**: "음", "어", "그니까" 같은 필러워드와 무음 구간을 자동으로 찾아 표시하고, 사용자가
+검토 후 일괄 삭제할 수 있게 함. 로드맵 8번(VAD 무음 스킵)과 10번(찾기/바꾸기)의 자연스러운
+확장.
+
+**변경 범위**
+- `backend/app/core/config.py`: 언어별 필러워드 사전(`FILLER_WORDS_KO`, `FILLER_WORDS_EN`)을
+  상수로 분리 — 사용자가 추후 커스텀 추가할 수 있게 리스트 형태로 관리.
+- `backend/app/services/segment_edit_service.py`: `find_filler_segments(segments, language) -> list[str]`
+  — 세그먼트 텍스트가 필러워드 사전과 거의 일치하는(예: 텍스트 전체가 "음" 또는 "어" 단독인)
+  세그먼트의 id 목록을 반환. 무음 구간은 `whisper_service.transcribe()`가 이미 `vad_filter=True`로
+  스킵하므로, 여기서는 필러워드 텍스트 패턴 매칭에 집중.
+- `backend/app/api/segments.py`: `POST /projects/{id}/items/{item_id}/segments/detect-fillers`
+  — 필러워드로 추정되는 세그먼트 id 목록을 반환(삭제는 하지 않음, 미리보기 전용). 실제 삭제는
+  기존 다중 선택 일괄 삭제(#14) 엔드포인트를 그대로 재사용.
+- `frontend/src/components/SegmentList.tsx`: "필러워드 자동 찾기" 버튼 → 감지된 세그먼트를
+  자동으로 체크박스 선택 상태로 만들어서, 사용자가 확인 후 기존 "선택 항목 삭제" 버튼으로
+  일괄 삭제하게 함(자동 삭제 대신 확인 단계를 거치도록 설계 — 오탐 방지).
+
+**주의점**: 필러워드 오탐(정상 발화가 "음..."으로 끝나는 문장 등) 가능성이 있으므로 자동
+삭제가 아니라 반드시 사용자 확인을 거치는 흐름으로 구현.
+
+**테스트**: `backend/tests/test_segment_edit_service.py`에 한국어/영어 필러워드 감지 케이스,
+오탐 방지(필러워드가 포함되어 있지만 실제 문장인 경우는 감지되지 않아야 함) 케이스 추가.
+
+### 21. 단어별(word-level) 타임스탬프 저장
+
+**목표**: faster-whisper가 `word_timestamps=True`로 이미 내부적으로 계산하고 있는 단어별
+시작/종료 시간을 실제로 저장 — 지금은 계산만 하고 버리고 있음. 이게 있어야 카라오케
+하이라이트(16번)가 근사치가 아니라 정확해지고, forced alignment(4번)·애니메이션 캡션과도
+연결됨.
+
+**변경 범위**
+- `backend/app/models/schemas.py`: `Word(BaseModel)` — `text: str`, `start: float`, `end: float`.
+  `Segment`에 `words: list[Word] = Field(default_factory=list)` 추가.
+- `backend/app/services/whisper_service.py`: `transcribe()`에서 `raw_segment.words`(faster-whisper가
+  이미 반환하는 값)를 그대로 `Word` 리스트로 변환해 `Segment.words`에 채움.
+- `backend/app/services/segment_edit_service.py`: `split_segment`/`merge_segments`/
+  `find_replace`처럼 텍스트를 바꾸는 편집 함수들은 `words`를 보존하지 않고 비움
+  (`words=[]`) — 편집 후에는 단어 정렬이 깨지므로 "재생 시 하이라이트 안 됨" 정도로 degrade,
+  잘못된 타이밍을 보여주는 것보다 안전.
+- `frontend/src/api/types.ts`, `frontend/src/utils/subtitleStyle.ts`: `Word` 타입 추가,
+  `karaokeHighlightLength`를 근사치 계산 대신 실제 `segment.words`의 `start`/`end`와
+  `currentTime`을 비교하는 정확한 방식으로 교체(word가 없는 세그먼트는 기존 근사 로직으로
+  폴백).
+- `backend/app/services/render_service.py`: `_karaoke_text()`도 균등 분할 대신 실제
+  `segment.words` 간격을 사용하도록 교체(폴백 유지).
+
+**주의점**: 세그먼트를 수정(텍스트 편집/분할/병합)하면 단어 정렬이 무효화되므로 `words`를
+비우는 정책 — "일부만 정확하고 일부는 근사"인 상태를 사용자가 인지할 수 있게 UI에서 구분
+표시할지는 후속 논의.
+
+**테스트**: `backend/tests/test_whisper_service.py`에 `words` 필드 매핑 케이스,
+`backend/tests/test_segment_edit_service.py`에 편집 후 `words`가 비워지는지 검증하는 케이스 추가.
+
+### 22. 텍스트 삭제 시 영상도 함께 잘리는 컷 편집
+
+**목표**: 세그먼트 리스트에서 문장을 삭제하면, 자막만 사라지는 게 아니라 해당 구간의
+영상/오디오도 최종 출력물(17번 번인 렌더링 결과물)에서 실제로 잘려나가게 함 — Vrew/Descript의
+"문서 편집하듯 영상 편집" 핵심 기능.
+
+**변경 범위**
+- `backend/app/services/render_service.py`: `build_cut_list(segments, deleted_ranges) -> list[tuple[float, float]]`
+  — 삭제되지 않고 남은 구간들의 (start, end) 리스트 생성.
+- `backend/app/services/render_service.py`의 `render()`: ffmpeg `-vf`에 더해 `select`/`concat`
+  필터(또는 `-ss`/`-t` 다중 구간 후 `concat` demuxer)를 이용해 남은 구간만 이어붙인 영상을
+  생성 — 자막 번인과 동시에 적용되므로 필터 그래프 구성이 복잡해짐(스파이크 필요).
+- `backend/app/models/schemas.py`: `MediaItem`에 삭제된(컷된) 세그먼트를 별도로 추적할지,
+  아니면 `segments` 리스트에서 완전히 제거된 것을 그대로 "삭제=컷"으로 취급할지 정책 결정
+  필요 — 후자가 단순하지만 15번(Undo/Redo)과 조합해 "되돌리기"가 컷 복구까지 포함하는지
+  명확히 해야 함.
+- `frontend/src/components/ExportPanel.tsx`: "영상으로 내보내기" 시 "삭제된 구간도 영상에서
+  잘라내기" 체크박스 추가(기본 off — 기존 번인 렌더링과 호환 유지, on으로 켜면 컷 편집 모드).
+
+**주의점**: 공수가 가장 큼 — ffmpeg 필터 그래프 조합(자막 번인 + 다중 구간 컷)을 먼저
+스파이크로 검증 필요. 15번(Undo/Redo)·17번(번인 렌더링)과의 상호작용 정의가 선행되어야 함.
+착수 전 별도 설계 문서 필요.
+
+**테스트**: `render_service`의 컷 구간 계산(`build_cut_list`)은 순수 함수라 단위 테스트 가능.
+실제 ffmpeg 컷+번인 조합은 통합 테스트에서 짧은 샘플 영상으로 검증(17번과 동일한 방식).
+
+## 권장 진행 순서 (19~22)
+
+1. **Whisper `large-v3-turbo` 모델 옵션 추가(#19, 최우선)** — 공수 거의 없음(설정값 1줄),
+   리스크 없음, 체감 효과(속도 5배) 즉시 확인 가능. 다른 항목보다 먼저 착수.
+2. **필러워드 자동 감지(#20)** — 공수 낮음, 기존 인프라 재사용.
+3. **단어별 타임스탬프(#21)** — 사용자에게 직접 보이진 않지만 카라오케(16번)·정밀 타이밍의
+   기반이 되므로 20번 다음 우선.
+4. **텍스트 기반 컷 편집(#22)** — 가장 크고 리스크 높음, 별도 스파이크/설계 문서 선행 후 착수.

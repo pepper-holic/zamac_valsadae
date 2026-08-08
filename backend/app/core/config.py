@@ -32,6 +32,7 @@ WHISPER_MODEL_SIZES = (
     "large",
     "large-v2",
     "large-v3",
+    "large-v3-turbo",
 )
 
 

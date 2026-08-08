@@ -147,6 +147,12 @@ def test_transcribe_requests_word_timestamps_for_accurate_sync():
     assert fake_model.received_kwargs.get("word_timestamps") is True
 
 
+def test_whisper_model_sizes_includes_large_v3_turbo():
+    from app.core.config import WHISPER_MODEL_SIZES
+
+    assert "large-v3-turbo" in WHISPER_MODEL_SIZES
+
+
 def test_is_model_cached_false_for_unknown_size():
     assert is_model_cached("not-a-real-model-size") is False
 

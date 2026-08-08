@@ -104,4 +104,5 @@ export const WHISPER_MODELS = [
   'large',
   'large-v2',
   'large-v3',
+  'large-v3-turbo',
 ] as const

@@ -174,5 +174,5 @@ python -m pytest
 
 ### Whisper 모델
 
-- `tiny` ~ `large-v3` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
+- `tiny` ~ `large-v3`, `large-v3-turbo` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
 - `data/whisper_models/`에 캐시됩니다 (`WHISPER_MODEL_CACHE_DIR`로 위치 변경 가능).

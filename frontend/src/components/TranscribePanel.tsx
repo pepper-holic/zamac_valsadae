@@ -19,6 +19,7 @@ const MODEL_NOTES: Record<string, string> = {
   large: '매우 느림(CPU) · 정확도 최고',
   'large-v2': '매우 느림(CPU) · 정확도 최고',
   'large-v3': '매우 느림(CPU) · 정확도 최고',
+  'large-v3-turbo': '빠름(large-v3 대비 약 5배) · 정확도 거의 동일',
 }
 
 export function TranscribePanel({ project, item, onStarted }: Props) {

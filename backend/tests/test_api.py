@@ -389,6 +389,7 @@ def test_models_status_reports_uncached_models(client):
         "large",
         "large-v2",
         "large-v3",
+        "large-v3-turbo",
     }
     assert set(body["translation"]) == {"ko->en", "en->ko"}
     assert all(isinstance(cached, bool) for cached in body["whisper"].values())
