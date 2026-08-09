@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -70,16 +71,19 @@ def _run_render(
         item.status = "rendered"
         item.progress = 1.0
         item.stage = None
+        item.started_at = None
         item.error = None
     except render_service.RenderCancelled:
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.progress = None
         item.error = "사용자가 렌더링을 취소했습니다."
     except Exception as exc:  # pragma: no cover - depends on ffmpeg availability
         logger.exception("Render failed for item %s", item_id)
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.error = str(exc)
     finally:
         cancellation.clear_cancel(item_id)
@@ -103,6 +107,7 @@ async def render_item(
     item.status = "rendering"
     item.stage = "rendering"
     item.progress = 0.0
+    item.started_at = time.time()
     item.error = None
     store.save(project)
 
@@ -131,16 +136,16 @@ async def export_item(
     use_translation: bool = Query(False),
     store: ProjectStore = Depends(get_store),
 ) -> Response:
-    _project, item = _get_project_and_item(project_id, item_id, store)
+    project, item = _get_project_and_item(project_id, item_id, store)
 
     if format == "srt":
-        body = to_srt(item.segments, use_translation=use_translation)
+        body = to_srt(item.segments, use_translation=use_translation, style=project.subtitle_style)
     elif format == "vtt":
-        body = to_vtt(item.segments, use_translation=use_translation)
+        body = to_vtt(item.segments, use_translation=use_translation, style=project.subtitle_style)
     elif format == "ass":
-        body = to_ass(item.segments, use_translation=use_translation)
+        body = to_ass(item.segments, use_translation=use_translation, style=project.subtitle_style)
     elif format == "ttml":
-        body = to_ttml(item.segments, use_translation=use_translation)
+        body = to_ttml(item.segments, use_translation=use_translation, style=project.subtitle_style)
     else:
         body = json.dumps(to_json(item.segments), ensure_ascii=False, indent=2)
 

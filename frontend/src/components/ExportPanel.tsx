@@ -24,7 +24,7 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
   const hasTranslations = item.segments.some((segment) => segment.translation)
   const isRendering = item.status === 'rendering'
   const canStartRender = hasSegments && RENDERABLE_STATUSES.has(item.status) && !isStartingRender
-  const elapsedSeconds = useElapsedSeconds(isRendering)
+  const elapsedSeconds = useElapsedSeconds(isRendering ? item.started_at : null)
 
   async function handleRender() {
     setIsStartingRender(true)

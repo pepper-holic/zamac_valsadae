@@ -18,15 +18,39 @@ import {
 import type { MediaItem, Project, ProjectStatus, ReviewDiffEntry, ReviewImportResult, Segment } from './api/types'
 import type { Toast } from './components/ProgressToast'
 import { ProgressToast } from './components/ProgressToast'
+import { ReviewPanel } from './components/ReviewPanel'
 import { SegmentDetailPanel } from './components/SegmentDetailPanel'
 import { SegmentList } from './components/SegmentList'
+import { SubtitleStylePanel } from './components/SubtitleStylePanel'
 import type { QueuedTask } from './components/TaskQueuePanel'
 import { TaskQueuePanel } from './components/TaskQueuePanel'
 import { Toolbar } from './components/Toolbar'
+import { TranscribePanel } from './components/TranscribePanel'
+import { TranslationPanel } from './components/TranslationPanel'
+import type { ToolKey } from './components/ToolRail'
+import { ToolRail } from './components/ToolRail'
 import { VideoStage } from './components/VideoStage'
+import { startColumnResize } from './utils/resize'
 
 const POLL_INTERVAL_MS = 1500
 const ACTIVE_STATUSES = new Set<ProjectStatus>(['transcribing', 'translating', 'rendering'])
+
+const TOOL_PANEL_MIN_WIDTH = 180
+const TOOL_PANEL_MAX_WIDTH = 460
+const VIDEO_COLUMN_MIN_WIDTH = 360
+const VIDEO_COLUMN_MAX_WIDTH = 1100
+
+function readStoredWidth(key: string, fallback: number): number {
+  const stored = Number(window.localStorage.getItem(key))
+  return Number.isFinite(stored) && stored > 0 ? stored : fallback
+}
+
+const TOOL_TITLES: Record<ToolKey, string> = {
+  transcribe: '전사',
+  translate: '번역',
+  style: '자막 스타일',
+  review: 'AI 검수',
+}
 
 type HistoryState = { canUndo: boolean; canRedo: boolean }
 
@@ -50,6 +74,9 @@ function App() {
   const [project, setProject] = useState<Project | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null)
+  const [activeTool, setActiveTool] = useState<ToolKey>('transcribe')
+  const [toolPanelWidth, setToolPanelWidth] = useState(() => readStoredWidth('zv_toolPanelWidth', 260))
+  const [videoColumnWidth, setVideoColumnWidth] = useState(() => readStoredWidth('zv_videoColumnWidth', 620))
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -84,6 +111,16 @@ function App() {
   const pendingItemIdRef = useRef<string | null>(null)
 
   const item = project?.items.find((i) => i.id === selectedItemId) ?? null
+
+  const handleToolPanelWidthChange = useCallback((next: number) => {
+    setToolPanelWidth(next)
+    window.localStorage.setItem('zv_toolPanelWidth', String(next))
+  }, [])
+
+  const handleVideoColumnWidthChange = useCallback((next: number) => {
+    setVideoColumnWidth(next)
+    window.localStorage.setItem('zv_videoColumnWidth', String(next))
+  }, [])
 
   useEffect(() => {
     listProjects().then(setProjects)
@@ -540,9 +577,10 @@ function App() {
         onItemUpdated={handleItemUpdated}
         onItemDeleted={handleItemDeleted}
         onProjectDeleted={handleProjectDeleted}
-        onGlossaryUpdated={handleProjectUpdated}
-        onStyleUpdated={handleProjectUpdated}
-        onReviewImported={handleReviewImported}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
 
       <TaskQueuePanel tasks={activeTasks} onSelectTask={handleSelectTask} />
@@ -553,6 +591,33 @@ function App() {
           <p className="app-empty-hint-icon" aria-hidden="true">
             🎬
           </p>
+          <h2 className="app-intro-title">Zamak_Valsadae</h2>
+          <p className="app-intro-subtitle">
+            영상/오디오에서 자막을 뽑고, 번역하고, 검수하고, 자막까지 구운 영상으로 내보내는
+            로컬 도구입니다.
+          </p>
+          <div className="app-intro-features">
+            <div className="app-intro-feature">
+              <span aria-hidden="true">🎙</span>
+              <b>전사</b>
+              <span>Whisper로 음성을 문장 단위 자막으로 인식합니다.</span>
+            </div>
+            <div className="app-intro-feature">
+              <span aria-hidden="true">🌐</span>
+              <b>번역</b>
+              <span>인식된 문장을 한↔영으로 번역합니다.</span>
+            </div>
+            <div className="app-intro-feature">
+              <span aria-hidden="true">Aa</span>
+              <b>스타일</b>
+              <span>자막 글꼴/색상/위치를 설정하고 바로 미리봅니다.</span>
+            </div>
+            <div className="app-intro-feature">
+              <span aria-hidden="true">✓</span>
+              <b>검수·내보내기</b>
+              <span>AI 검수를 반영하고 자막 파일/영상으로 내보냅니다.</span>
+            </div>
+          </div>
           <p>영상이나 오디오 파일을 업로드한 뒤, 파일을 선택하고 "전사 시작"을 눌러주세요.</p>
           <p className="hint-text">상단의 "+ 업로드" 버튼을 누르거나, 파일을 이 창에 끌어다 놓으세요.</p>
         </div>
@@ -565,7 +630,47 @@ function App() {
       )}
 
       {project && item && (
+        <div className="workspace-row">
+          <ToolRail activeTool={activeTool} onSelect={setActiveTool} />
+
+          <div className="tool-panel-column" style={{ width: toolPanelWidth }}>
+            <div
+              className="panel-resize-handle"
+              onPointerDown={(event) =>
+                startColumnResize(
+                  event,
+                  toolPanelWidth,
+                  handleToolPanelWidthChange,
+                  TOOL_PANEL_MIN_WIDTH,
+                  TOOL_PANEL_MAX_WIDTH,
+                )
+              }
+              data-tip="드래그해서 패널 너비를 조정합니다."
+            />
+            <div className="tool-panel-column-head">
+              <h3>{TOOL_TITLES[activeTool]}</h3>
+            </div>
+            {activeTool === 'transcribe' && (
+              <TranscribePanel project={project} item={item} onStarted={handleItemUpdated} />
+            )}
+            {activeTool === 'translate' && (
+              <TranslationPanel
+                project={project}
+                item={item}
+                onStarted={handleItemUpdated}
+                onGlossaryUpdated={handleProjectUpdated}
+              />
+            )}
+            {activeTool === 'style' && (
+              <SubtitleStylePanel project={project} onStyleUpdated={handleProjectUpdated} />
+            )}
+            {activeTool === 'review' && (
+              <ReviewPanel project={project} item={item} onImported={handleReviewImported} />
+            )}
+          </div>
+
         <div className="three-column-layout">
+          <div className="video-column" style={{ width: videoColumnWidth }}>
           <VideoStage
             videoRef={videoRef}
             src={mediaUrl(project.id, item.id)}
@@ -589,6 +694,21 @@ function App() {
             onSelectSegment={setSelectedSegmentId}
             onResizeSegment={handleResizeSegment}
           />
+          </div>
+
+          <div
+            className="panel-resize-handle"
+            onPointerDown={(event) =>
+              startColumnResize(
+                event,
+                videoColumnWidth,
+                handleVideoColumnWidthChange,
+                VIDEO_COLUMN_MIN_WIDTH,
+                VIDEO_COLUMN_MAX_WIDTH,
+              )
+            }
+            data-tip="드래그해서 영상/목록 영역 너비를 조정합니다."
+          />
 
           <SegmentList
             projectId={project.id}
@@ -607,10 +727,6 @@ function App() {
             onFindReplace={handleFindReplace}
             onBulkDelete={handleBulkDelete}
             onBulkMarkReviewed={handleBulkMarkReviewed}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
           />
 
           <SegmentDetailPanel
@@ -629,6 +745,7 @@ function App() {
             onRejectDiff={handleRejectDiff}
             onSplitSegment={handleSplitSegment}
           />
+        </div>
         </div>
       )}
     </div>

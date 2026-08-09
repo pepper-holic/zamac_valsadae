@@ -54,6 +54,8 @@ class SubtitleStyle(BaseModel):
     fade_in_ms: int = 0
     fade_out_ms: int = 0
     karaoke_highlight: bool = False
+    auto_line_break: bool = True
+    max_line_chars: int = 18
 
 
 class NamedSubtitleStyle(BaseModel):
@@ -77,6 +79,7 @@ class MediaItem(BaseModel):
     error: str | None = None
     progress: float | None = None
     stage: ProgressStage | None = None
+    started_at: float | None = None
     segments: list[Segment] = Field(default_factory=list)
     rendered_path: str | None = None
 

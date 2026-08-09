@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -44,16 +45,19 @@ def _run_transcription(
         item.status = "transcribed"
         item.progress = 1.0
         item.stage = None
+        item.started_at = None
         item.error = None
     except whisper_service.TranscriptionCancelled:
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.progress = None
         item.error = "사용자가 전사를 취소했습니다."
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps
         logger.exception("Transcription failed for item %s", item_id)
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.error = str(exc)
     finally:
         cancellation.clear_cancel(item_id)
@@ -83,6 +87,7 @@ async def transcribe_item(
     item.whisper_model = request.model
     item.progress = 0.0
     item.stage = None
+    item.started_at = time.time()
     item.error = None
     store.save(project)
 

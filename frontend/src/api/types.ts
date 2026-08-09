@@ -48,6 +48,7 @@ export interface MediaItem {
   error: string | null
   progress: number | null
   stage: ProgressStage | null
+  started_at: number | null
   segments: Segment[]
   rendered_path: string | null
 }
@@ -64,6 +65,8 @@ export interface SubtitleStyle {
   fade_in_ms: number
   fade_out_ms: number
   karaoke_highlight: boolean
+  auto_line_break: boolean
+  max_line_chars: number
 }
 
 export interface NamedSubtitleStyle {

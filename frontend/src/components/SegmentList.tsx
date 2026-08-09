@@ -16,10 +16,6 @@ type Props = {
   onFindReplace: (field: 'text' | 'translation', find: string, replace: string) => Promise<void>
   onBulkDelete: (segmentIds: string[]) => Promise<void>
   onBulkMarkReviewed: (segmentIds: string[]) => Promise<void>
-  canUndo: boolean
-  canRedo: boolean
-  onUndo: () => void
-  onRedo: () => void
 }
 
 type FilterKey = 'all' | 'unreviewed' | 'needsCheck' | 'ok' | 'reviewed'
@@ -69,10 +65,6 @@ export function SegmentList({
   onFindReplace,
   onBulkDelete,
   onBulkMarkReviewed,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
 }: Props) {
   const activeRowRef = useRef<HTMLLIElement>(null)
   const [page, setPage] = useState(0)
@@ -194,24 +186,6 @@ export function SegmentList({
     <section className="segment-list-panel">
       <div className="segment-list-header">
         <h2>검수 대상 문장 ({segments.length})</h2>
-        <div className="segment-undo-redo">
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={!canUndo}
-            data-tip="되돌리기 (Ctrl+Z)"
-          >
-            ↶ 되돌리기
-          </button>
-          <button
-            type="button"
-            onClick={onRedo}
-            disabled={!canRedo}
-            data-tip="다시 실행 (Ctrl+Shift+Z)"
-          >
-            ↷ 다시 실행
-          </button>
-        </div>
         {totalPages > 1 && (
           <div className="segment-list-pager">
             <button
@@ -372,10 +346,10 @@ export function SegmentList({
                   <span className="segment-time">{formatClock(segment.start)}</span>
                   <span className="segment-text">
                     {segment.speaker && <span className="segment-speaker">{segment.speaker}</span>}
-                    <span className="segment-text-original">{segment.text || '(빈 문장)'}</span>
                     {segment.translation && (
                       <span className="segment-text-translation">{segment.translation}</span>
                     )}
+                    <span className="segment-text-original">{segment.text || '(빈 문장)'}</span>
                   </span>
                   {flagged && (
                     <span className="quality-badge" data-tip={qualityTip(segment)}>
@@ -383,6 +357,24 @@ export function SegmentList({
                     </span>
                   )}
                   {pendingDiffs > 0 && <span className="segment-diff-badge">{pendingDiffs}</span>}
+                  <span className="segment-row-actions">
+                    <span
+                      className="segment-row-action"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelect(segment.id)
+                      }}
+                      data-tip="상세 편집 패널에서 이 문장을 수정합니다."
+                    >
+                      ✎
+                    </span>
+                    <span
+                      className="segment-row-action"
+                      data-tip={qualityTip(segment) ?? '검수 메모가 없습니다.'}
+                    >
+                      💬
+                    </span>
+                  </span>
                   <span
                     className={segment.reviewed ? 'reviewed-toggle checked' : 'reviewed-toggle'}
                     onClick={(event) => handleToggleReviewed(segment, event)}

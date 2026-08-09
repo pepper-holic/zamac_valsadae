@@ -88,6 +88,8 @@ npm run dev
 - `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
 - `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
 - `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
+- `docs/pages/` — 서버 호스팅(SaaS) 전환 시 필요한 페이지 초안(이용약관/개인정보처리방침/
+  가격 정책 등). `[T.B.D]` 표시는 사업자 등록·요금제 확정 후 채워야 하는 항목입니다.
 
 ## 내부 개발 가이드
 
@@ -134,7 +136,13 @@ python -m pytest
 
 ### 프론트엔드 테스트
 
-- 현재 프론트엔드 테스트 스위트는 별도 설정이 없으므로, UI 변경 시 `npm run dev`로 직접 확인합니다.
+```powershell
+cd frontend
+npm run test
+```
+
+- Vitest + React Testing Library를 사용합니다. 순수 로직(유틸/훅) 위주로 작성되어 있으며,
+  UI 동작은 `npm run dev`로 직접 확인합니다.
 
 ## 환경변수
 
@@ -176,3 +184,13 @@ python -m pytest
 
 - `tiny` ~ `large-v3`, `large-v3-turbo` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
 - `data/whisper_models/`에 캐시됩니다 (`WHISPER_MODEL_CACHE_DIR`로 위치 변경 가능).
+
+## 버그 리포트 / 기능 요청
+
+이 저장소의 [GitHub Issues](https://github.com/pepper-holic/zamac_valsadae/issues)로 등록해주세요.
+버그 리포트는 재현 절차, 기대한 동작, 실제 동작, (가능하면) 스크린샷을 포함해주시면 빠르게
+확인할 수 있습니다.
+
+## 라이선스
+
+이 저장소는 비공개(All rights reserved)입니다 — 자세한 내용은 [`LICENSE`](./LICENSE)를 참고하세요.

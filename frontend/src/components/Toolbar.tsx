@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MediaItem, Project, ReviewImportResult } from '../api/types'
+import type { MediaItem, Project } from '../api/types'
 import { deleteProject } from '../api/client'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
-import { ReviewPanel } from './ReviewPanel'
-import { SubtitleStylePanel } from './SubtitleStylePanel'
-import { TranscribePanel } from './TranscribePanel'
-import { TranslationPanel } from './TranslationPanel'
-
-type MenuKey = 'transcribe' | 'translate' | 'style' | 'export' | 'review'
 
 const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 
@@ -37,9 +31,10 @@ type Props = {
   onItemUpdated: (item: MediaItem) => void
   onItemDeleted: (itemId: string) => Promise<void>
   onProjectDeleted: (projectId: string) => void
-  onGlossaryUpdated: (project: Project) => void
-  onStyleUpdated: (project: Project) => void
-  onReviewImported: (result: ReviewImportResult) => void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
 }
 
 export function Toolbar({
@@ -54,11 +49,12 @@ export function Toolbar({
   onItemUpdated,
   onItemDeleted,
   onProjectDeleted,
-  onGlossaryUpdated,
-  onStyleUpdated,
-  onReviewImported,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: Props) {
-  const [openMenu, setOpenMenu] = useState<MenuKey | null>(null)
+  const [isExportOpen, setIsExportOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isDeletingProject, setIsDeletingProject] = useState(false)
@@ -69,20 +65,16 @@ export function Toolbar({
 
   const item = project?.items.find((i) => i.id === selectedItemId) ?? null
 
-  function toggleMenu(key: MenuKey) {
-    setOpenMenu((prev) => (prev === key ? null : key))
-  }
-
   useEffect(() => {
-    if (!openMenu) return
+    if (!isExportOpen) return
     function handlePointerDown(event: MouseEvent) {
       if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
-        setOpenMenu(null)
+        setIsExportOpen(false)
       }
     }
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [openMenu])
+  }, [isExportOpen])
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
@@ -153,14 +145,6 @@ export function Toolbar({
       setIsDeletingItem(false)
     }
   }
-
-  const tabs: { key: MenuKey; label: string; tip: string }[] = [
-    { key: 'transcribe', label: '전사', tip: 'Whisper로 음성을 인식해 자막(문장 목록)을 만듭니다.' },
-    { key: 'translate', label: '번역', tip: '추출된 문장을 한↔영으로 번역합니다.' },
-    { key: 'style', label: '자막 스타일', tip: '자막의 글꼴/색상/위치/효과를 설정하고 미리보기에 바로 반영합니다.' },
-    { key: 'export', label: '내보내기', tip: 'SRT/VTT/JSON 자막 파일로 내려받습니다.' },
-    { key: 'review', label: 'AI 검수', tip: '검수용 파일을 내려받아 AI 챗에 올려 교정받고, 결과를 다시 불러옵니다.' },
-  ]
 
   return (
     <header className="toolbar" ref={toolbarRef}>
@@ -279,23 +263,32 @@ export function Toolbar({
         </label>
       )}
 
-      {item && (
-        <nav className="toolbar-segmented" aria-label="자막 도구">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              className={openMenu === tab.key ? 'toolbar-tab active' : 'toolbar-tab'}
-              onClick={() => toggleMenu(tab.key)}
-              data-tip={tab.tip}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      )}
+      <div className="toolbar-zone-spacer" />
 
-      {item && <div className="toolbar-divider" aria-hidden="true" />}
+      {item && (
+        <>
+          <button
+            type="button"
+            className="toolbar-icon-button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            data-tip="되돌리기 (Ctrl+Z)"
+            aria-label="되돌리기"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className="toolbar-icon-button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            data-tip="다시 실행 (Ctrl+Shift+Z)"
+            aria-label="다시 실행"
+          >
+            ↷
+          </button>
+        </>
+      )}
 
       <button
         type="button"
@@ -307,28 +300,19 @@ export function Toolbar({
         ?
       </button>
 
-      {project && item && openMenu && (
+      <button
+        type="button"
+        className="toolbar-export-button"
+        onClick={() => setIsExportOpen((prev) => !prev)}
+        disabled={!item}
+        data-tip={item ? 'SRT/VTT/JSON 자막 파일로 내려받거나 영상을 렌더링합니다.' : '먼저 파일을 선택하세요.'}
+      >
+        ⭳ 내보내기
+      </button>
+
+      {project && item && isExportOpen && (
         <div className="toolbar-dropdown">
-          {openMenu === 'transcribe' && (
-            <TranscribePanel project={project} item={item} onStarted={onItemUpdated} />
-          )}
-          {openMenu === 'translate' && (
-            <TranslationPanel
-              project={project}
-              item={item}
-              onStarted={onItemUpdated}
-              onGlossaryUpdated={onGlossaryUpdated}
-            />
-          )}
-          {openMenu === 'style' && (
-            <SubtitleStylePanel project={project} onStyleUpdated={onStyleUpdated} />
-          )}
-          {openMenu === 'export' && (
-            <ExportPanel project={project} item={item} onItemUpdated={onItemUpdated} />
-          )}
-          {openMenu === 'review' && (
-            <ReviewPanel project={project} item={item} onImported={onReviewImported} />
-          )}
+          <ExportPanel project={project} item={item} onItemUpdated={onItemUpdated} />
         </div>
       )}
 

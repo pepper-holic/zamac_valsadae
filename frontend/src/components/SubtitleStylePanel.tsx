@@ -235,6 +235,46 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
         </label>
       </div>
 
+      <div className="panel-row">
+        <label
+          className="checkbox-label"
+          data-tip="긴 문장은 마침표 기준으로, 한 문장이 너무 길면 단어 기준으로 자동 줄바꿈합니다."
+        >
+          <input
+            type="checkbox"
+            checked={style.auto_line_break}
+            onChange={(event) => applyStyle({ auto_line_break: event.target.checked })}
+          />
+          자동 줄바꿈
+        </label>
+
+        <label htmlFor="style-max-line-chars">줄당 최대 글자수</label>
+        <input
+          id="style-max-line-chars"
+          type="number"
+          min={6}
+          max={60}
+          value={style.max_line_chars}
+          disabled={!style.auto_line_break}
+          onChange={(event) => applyStyle({ max_line_chars: Number(event.target.value) })}
+        />
+
+        <button
+          type="button"
+          onClick={() => applyStyle({ auto_line_break: true, max_line_chars: 14 })}
+          data-tip="세로(9:16, 쇼츠) 화면에 맞춘 짧은 줄바꿈 기준을 적용합니다."
+        >
+          9:16 짧게
+        </button>
+        <button
+          type="button"
+          onClick={() => applyStyle({ auto_line_break: true, max_line_chars: 24 })}
+          data-tip="가로(16:9, 유튜브) 화면에 맞춘 넉넉한 줄바꿈 기준을 적용합니다."
+        >
+          16:9 길게
+        </button>
+      </div>
+
       <div className="panel-row subtitle-style-presets">
         <label htmlFor="style-preset-name">프리셋</label>
         <input

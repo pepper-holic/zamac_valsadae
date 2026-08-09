@@ -25,10 +25,7 @@ type ChipProps = {
 }
 
 function TaskQueueChip({ task, onSelect }: ChipProps) {
-  // 작업이 이 브라우저 세션에서 진행 중으로 관측되는 동안의 경과 시간입니다 -
-  // 페이지를 새로고침하면 그 시점부터 다시 셉니다(백엔드가 실제 시작 시각을
-  // 내려주지 않으므로 근사치).
-  const elapsedSeconds = useElapsedSeconds(true)
+  const elapsedSeconds = useElapsedSeconds(task.item.started_at)
 
   return (
     <button

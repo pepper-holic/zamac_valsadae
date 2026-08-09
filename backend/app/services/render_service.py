@@ -6,6 +6,7 @@ from pathlib import Path
 from app.core.config import get_settings
 from app.models.schemas import Segment, SubtitleStyle
 from app.services.subtitle_format import format_ass_timestamp, pick_text
+from app.services.text_wrap import wrap_subtitle_text
 
 ProgressCallback = Callable[[float], None]
 CancelCallback = Callable[[], bool]
@@ -150,12 +151,13 @@ def build_ass(
         override = ""
         if style.fade_in_ms > 0 or style.fade_out_ms > 0:
             override = f"{{\\fad({style.fade_in_ms},{style.fade_out_ms})}}"
-        body = (
-            _karaoke_text(segment, text, segment.end - segment.start)
-            if style.karaoke_highlight
-            else text
-        )
-        body = body.replace("\n", "\\N")
+        if style.karaoke_highlight:
+            # 단어별 \k 타이밍 태그가 붙으므로 자동 줄바꿈은 적용하지 않는다
+            # (줄바꿈 위치가 타이밍 경계와 어긋나면 카라오케 효과가 깨짐).
+            body = _karaoke_text(segment, text, segment.end - segment.start)
+        else:
+            wrapped = wrap_subtitle_text(text, style.max_line_chars) if style.auto_line_break else text
+            body = wrapped.replace("\n", "\\N")
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{override}{body}")
     return "\n".join(lines) + "\n"
 

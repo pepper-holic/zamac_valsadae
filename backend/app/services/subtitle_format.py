@@ -1,6 +1,7 @@
 from xml.sax.saxutils import escape
 
-from app.models.schemas import Segment
+from app.models.schemas import Segment, SubtitleStyle
+from app.services.text_wrap import wrap_subtitle_text
 
 
 def _format_timestamp(seconds: float, decimal_separator: str) -> str:
@@ -26,22 +27,29 @@ def pick_text(segment: Segment, use_translation: bool) -> str:
     return segment.text
 
 
-def to_srt(segments: list[Segment], use_translation: bool = False) -> str:
+def _pick_wrapped_text(segment: Segment, use_translation: bool, style: SubtitleStyle | None) -> str:
+    text = pick_text(segment, use_translation)
+    if style is not None and style.auto_line_break:
+        return wrap_subtitle_text(text, style.max_line_chars)
+    return text
+
+
+def to_srt(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
     blocks = []
     for index, segment in enumerate(segments, start=1):
         start = _format_timestamp(segment.start, ",")
         end = _format_timestamp(segment.end, ",")
-        text = pick_text(segment, use_translation)
+        text = _pick_wrapped_text(segment, use_translation, style)
         blocks.append(f"{index}\n{start} --> {end}\n{text}\n")
     return "\n".join(blocks)
 
 
-def to_vtt(segments: list[Segment], use_translation: bool = False) -> str:
+def to_vtt(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
     lines = ["WEBVTT", ""]
     for segment in segments:
         start = _format_timestamp(segment.start, ".")
         end = _format_timestamp(segment.end, ".")
-        text = pick_text(segment, use_translation)
+        text = _pick_wrapped_text(segment, use_translation, style)
         lines.append(f"{start} --> {end}")
         lines.append(text)
         lines.append("")
@@ -64,22 +72,22 @@ Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"""
 
 
-def to_ass(segments: list[Segment], use_translation: bool = False) -> str:
+def to_ass(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
     lines = [_ASS_HEADER]
     for segment in segments:
         start = format_ass_timestamp(segment.start)
         end = format_ass_timestamp(segment.end)
-        text = pick_text(segment, use_translation).replace("\n", "\\N")
+        text = _pick_wrapped_text(segment, use_translation, style).replace("\n", "\\N")
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
     return "\n".join(lines) + "\n"
 
 
-def to_ttml(segments: list[Segment], use_translation: bool = False) -> str:
+def to_ttml(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
     paragraphs = []
     for segment in segments:
         start = _format_timestamp(segment.start, ".")
         end = _format_timestamp(segment.end, ".")
-        text = escape(pick_text(segment, use_translation))
+        text = escape(_pick_wrapped_text(segment, use_translation, style)).replace("\n", "<br/>")
         paragraphs.append(f'      <p begin="{start}" end="{end}">{text}</p>')
     body = "\n".join(paragraphs)
 

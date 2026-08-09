@@ -46,7 +46,7 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
 
   const isModelCached = whisperCacheStatus[model]
   const isDownloadingModel = item.status === 'transcribing' && item.stage === 'downloading_model'
-  const elapsedSeconds = useElapsedSeconds(item.status === 'transcribing')
+  const elapsedSeconds = useElapsedSeconds(item.status === 'transcribing' ? item.started_at : null)
 
   async function handleTranscribe() {
     setError(null)

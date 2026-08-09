@@ -37,7 +37,7 @@ export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }
   const isBusy = item.status === 'translating' || item.status === 'transcribing'
   const isModelCached = translationCacheStatus[direction]
   const isDownloadingModel = item.status === 'translating' && item.stage === 'downloading_model'
-  const elapsedSeconds = useElapsedSeconds(item.status === 'translating')
+  const elapsedSeconds = useElapsedSeconds(item.status === 'translating' ? item.started_at : null)
 
   async function handleTranslate() {
     setError(null)

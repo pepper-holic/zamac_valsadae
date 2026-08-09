@@ -162,8 +162,9 @@ export function HelpModal({ onClose }: Props) {
                   <td className="mono">일괄 업로드</td>
                   <td>
                     파일을 여러 개 한 번에 선택하거나 끌어다 놓으면 같은 프로젝트 안에 파일마다 따로
-                    담겨 관리되면서, 업로드 버튼 옆에서 고른 모델로 순서대로 자동 전사합니다. 화면
-                    상단에 진행 상황이 표시됩니다.
+                    담겨 관리됩니다. 업로드만으로는 전사가 시작되지 않으며, 파일을 선택하고
+                    <b> 전사</b> 탭에서 직접 시작해야 합니다 — 진행 중인 작업은 화면 상단 작업 큐에서
+                    항상 확인할 수 있습니다.
                   </td>
                 </tr>
               </tbody>
@@ -177,8 +178,98 @@ export function HelpModal({ onClose }: Props) {
                 <tr><td className="mono">Space</td><td>재생 / 일시정지</td></tr>
                 <tr><td className="mono">← / →</td><td>1초 뒤로 / 앞으로</td></tr>
                 <tr><td className="mono">↑ / ↓</td><td>이전 / 다음 문장으로 이동</td></tr>
+                <tr><td className="mono">Ctrl+Z</td><td>되돌리기</td></tr>
+                <tr><td className="mono">Ctrl+Shift+Z</td><td>다시 실행</td></tr>
               </tbody>
             </table>
+          </section>
+
+          <section className="help-section">
+            <h3>데이터 보호</h3>
+            <p>
+              업로드한 영상/오디오, 전사·번역 결과는 <b>이 컴퓨터의 <code>data/</code> 폴더 안에만</b>
+              저장됩니다 — 별도 서버로 업로드되지 않으며, 사용 현황을 수집하는 분석/추적 코드도
+              들어있지 않습니다.
+            </p>
+            <table className="help-table">
+              <tbody>
+                <tr>
+                  <td className="mono">전사(Whisper)</td>
+                  <td>완전히 로컬에서 처리됩니다. 모델 파일 자체는 최초 1회 HuggingFace에서
+                    내려받아 <code>data/whisper_models/</code>에 캐시되며, 이후로는 인터넷 연결
+                    없이도 동작합니다.</td>
+                </tr>
+                <tr>
+                  <td className="mono">번역 — 로컬 모델</td>
+                  <td>Whisper와 동일하게 완전히 로컬에서 처리됩니다.</td>
+                </tr>
+                <tr>
+                  <td className="mono">번역 — API 엔진</td>
+                  <td><code>TRANSLATION_API_KEY</code>를 직접 설정했을 때만 활성화되는
+                    선택 사항입니다. 이 경우 번역할 문장 텍스트가 설정한 API 엔드포인트로
+                    전송됩니다(영상/오디오 원본은 전송되지 않음).</td>
+                </tr>
+                <tr>
+                  <td className="mono">AI 검수</td>
+                  <td>자동 전송이 아니라, 검수용 파일을 내려받아 사용자가 직접 원하는 AI 챗에
+                    올리고 결과를 다시 불러오는 방식입니다 — 어떤 서비스에 무엇을 보낼지는
+                    전적으로 사용자가 결정합니다.</td>
+                </tr>
+                <tr>
+                  <td className="mono">데이터 완전 삭제</td>
+                  <td><code>data/</code> 폴더를 지우면 업로드한 파일, 프로젝트, 모델 캐시까지
+                    한 번에 모두 삭제됩니다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="help-section">
+            <h3>문제 해결</h3>
+            <table className="help-table">
+              <tbody>
+                <tr>
+                  <td className="mono">모델 다운로드가 멈춘 것 같음</td>
+                  <td>
+                    Whisper/번역 모델은 최초 1회만 자동 다운로드되며 크기에 따라 수 분이 걸릴 수
+                    있습니다. 진행바가 인디터미네이트(불확정) 상태로 오래 유지되면 네트워크 연결을
+                    확인하세요. 중단 후 다시 시작해도 이미 받은 부분은 다시 받지 않습니다.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="mono">화자 분리가 안 됨 / 오류</td>
+                  <td>
+                    HuggingFace 토큰(<code>HF_TOKEN</code>)이 설정되어 있는지, 그리고
+                    pyannote/speaker-diarization-3.1 모델 페이지에서 이용약관에 동의했는지
+                    확인하세요. 둘 다 없으면 화자 분리 없이 전사만 진행됩니다.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="mono">영상 내보내기(번인 렌더링)가 실패함</td>
+                  <td>
+                    시스템에 ffmpeg가 설치되어 있어야 합니다(포터블 설치를 썼다면 <code>install.bat</code>이
+                    자동으로 받아둡니다). 렌더링은 영상 길이에 비례해 몇 분~십몇 분 걸릴 수 있으니
+                    진행률 표시가 남아있는 동안은 기다려주세요. 실패가 반복되면 원본 파일의 코덱을
+                    의심해볼 수 있습니다.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="mono">전사/번역 진행이 "error" 상태로 멈춤</td>
+                  <td>
+                    서버가 재시작되면 진행 중이던 작업은 이어받지 못하고 오류로 표시됩니다 — 해당
+                    파일을 다시 선택해 전사/번역을 재시작하세요.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="mono">번역이 이상하게 나옴(한/영 섞임 등)</td>
+                  <td>위 &quot;한/영이 섞인 영상은?&quot; 섹션을 참고하세요.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="help-hint">
+              여기서 해결되지 않는 문제는 <b>버그 리포트</b>로 남겨주세요 — README 하단에
+              GitHub Issues 링크가 있습니다.
+            </p>
           </section>
         </div>
       </div>

@@ -28,6 +28,7 @@ def recover_interrupted_projects(store: ProjectStore) -> None:
                 item.status = "error"
                 item.stage = None
                 item.progress = None
+                item.started_at = None
                 item.error = _INTERRUPTED_MESSAGE
                 changed = True
         if changed:

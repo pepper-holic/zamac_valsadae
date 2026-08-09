@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
@@ -51,16 +52,19 @@ def _run_translation(
         item.status = "translated"
         item.progress = 1.0
         item.stage = None
+        item.started_at = None
         item.error = None
     except translation_service.TranslationCancelled:
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.progress = None
         item.error = "사용자가 번역을 취소했습니다."
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps / network
         logger.exception("Translation failed for item %s", item_id)
         item.status = "error"
         item.stage = None
+        item.started_at = None
         item.error = str(exc)
     finally:
         cancellation.clear_cancel(item_id)
@@ -89,6 +93,7 @@ async def translate_item(
     item.status = "translating"
     item.progress = 0.0
     item.stage = None
+    item.started_at = time.time()
     item.error = None
     store.save(project)
 
