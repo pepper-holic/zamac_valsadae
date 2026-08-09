@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { ExportFormat, MediaItem, Project } from '../api/types'
 import { cancelItem, exportUrl, renderItem, renderedVideoUrl } from '../api/client'
+import { formatClock } from '../utils/time'
+import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
 type Props = {
   project: Project
@@ -22,6 +24,7 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
   const hasTranslations = item.segments.some((segment) => segment.translation)
   const isRendering = item.status === 'rendering'
   const canStartRender = hasSegments && RENDERABLE_STATUSES.has(item.status) && !isStartingRender
+  const elapsedSeconds = useElapsedSeconds(isRendering)
 
   async function handleRender() {
     setIsStartingRender(true)
@@ -152,8 +155,9 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
             />
           </div>
           <p className="hint-text">
-            {Math.round((item.progress ?? 0) * 100)}% 렌더링 중 — 영상 길이에 비례해 몇 분~십몇
-            분이 걸릴 수 있습니다.
+            {Math.round((item.progress ?? 0) * 100)}% 렌더링 중 (경과{' '}
+            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) — 영상 길이에 비례해 몇
+            분~십몇 분이 걸릴 수 있습니다.
           </p>
         </div>
       )}

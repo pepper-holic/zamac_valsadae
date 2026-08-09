@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MediaItem, Project, ReviewImportResult } from '../api/types'
-import { WHISPER_MODELS } from '../api/types'
 import { deleteProject } from '../api/client'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
@@ -41,8 +40,6 @@ type Props = {
   onGlossaryUpdated: (project: Project) => void
   onStyleUpdated: (project: Project) => void
   onReviewImported: (result: ReviewImportResult) => void
-  batchModel: string
-  onBatchModelChange: (model: string) => void
 }
 
 export function Toolbar({
@@ -60,8 +57,6 @@ export function Toolbar({
   onGlossaryUpdated,
   onStyleUpdated,
   onReviewImported,
-  batchModel,
-  onBatchModelChange,
 }: Props) {
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -233,7 +228,7 @@ export function Toolbar({
           </select>
           <label
             className={isDragOver ? 'upload-button compact drag-over' : 'upload-button compact'}
-            data-tip="새 영상/오디오 파일을 이 프로젝트에 추가합니다. 여러 개를 한 번에 선택하거나 끌어다 놓으면 파일마다 별도로 관리되며 순서대로 자동 전사됩니다. 프로젝트를 선택하지 않은 상태면 새 프로젝트를 만들어 추가합니다."
+            data-tip="새 영상/오디오 파일을 이 프로젝트에 추가합니다. 여러 개를 한 번에 선택하거나 끌어다 놓을 수 있으며, 파일마다 별도로 관리됩니다. 업로드만으로는 전사가 시작되지 않으며, 파일을 선택하고 '전사' 메뉴에서 직접 시작해야 합니다."
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -249,18 +244,6 @@ export function Toolbar({
               hidden
             />
           </label>
-          <select
-            className="toolbar-select"
-            value={batchModel}
-            onChange={(event) => onBatchModelChange(event.target.value)}
-            data-tip="여러 파일을 한 번에 올렸을 때 자동 전사에 사용할 Whisper 모델 크기입니다."
-          >
-            {WHISPER_MODELS.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
           {item && (
             <button
               type="button"

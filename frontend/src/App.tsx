@@ -12,23 +12,29 @@ import {
   listProjects,
   redoItem,
   splitSegment,
-  transcribeItem,
   undoItem,
   updateSegment,
 } from './api/client'
-import type { MediaItem, Project, ReviewDiffEntry, ReviewImportResult, Segment } from './api/types'
+import type { MediaItem, Project, ProjectStatus, ReviewDiffEntry, ReviewImportResult, Segment } from './api/types'
 import type { Toast } from './components/ProgressToast'
 import { ProgressToast } from './components/ProgressToast'
 import { SegmentDetailPanel } from './components/SegmentDetailPanel'
 import { SegmentList } from './components/SegmentList'
+import type { QueuedTask } from './components/TaskQueuePanel'
+import { TaskQueuePanel } from './components/TaskQueuePanel'
 import { Toolbar } from './components/Toolbar'
 import { VideoStage } from './components/VideoStage'
 
 const POLL_INTERVAL_MS = 1500
-const ACTIVE_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
+const ACTIVE_STATUSES = new Set<ProjectStatus>(['transcribing', 'translating', 'rendering'])
 
-type QueueEntry = { projectId: string; itemId: string }
 type HistoryState = { canUndo: boolean; canRedo: boolean }
+
+function projectLabel(project: Project): string {
+  if (project.name) return project.name
+  if (project.items[0]) return project.items[0].filename
+  return '(이름 없는 프로젝트)'
+}
 
 function updateItemInProject(
   project: Project,
@@ -66,15 +72,16 @@ function App() {
     setHistoryByItem((prev) => ({ ...prev, [itemId]: state }))
   }, [])
 
-  const [batchModel, setBatchModel] = useState('small')
-  const [transcribeQueue, setTranscribeQueue] = useState<QueueEntry[]>([])
-  const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null)
-
   const videoRef = useRef<HTMLVideoElement>(null)
   // Set right before setSelectedProjectId() when we already have the fresh
   // Project object in hand (e.g. one we just created) - tells the effect
   // below to skip its own fetch instead of racing a stale one against it.
   const skipNextProjectFetchRef = useRef<string | null>(null)
+  // Set right before setSelectedProjectId() when jumping to a specific item
+  // in a *different* project (e.g. from the task queue) - tells the project
+  // load effect below which item to select instead of defaulting to the
+  // first one.
+  const pendingItemIdRef = useRef<string | null>(null)
 
   const item = project?.items.find((i) => i.id === selectedItemId) ?? null
 
@@ -94,8 +101,12 @@ function App() {
     }
     getProject(selectedProjectId).then((loaded) => {
       setProject(loaded)
-      setSelectedItemId(loaded.items[0]?.id ?? null)
-      setSelectedSegmentId(loaded.items[0]?.segments[0]?.id ?? null)
+      const wantedItemId = pendingItemIdRef.current
+      pendingItemIdRef.current = null
+      const resolvedItem =
+        (wantedItemId && loaded.items.find((i) => i.id === wantedItemId)) || loaded.items[0]
+      setSelectedItemId(resolvedItem?.id ?? null)
+      setSelectedSegmentId(resolvedItem?.segments[0]?.id ?? null)
       setReviewDiffs([])
       setReviewUnknownIds([])
       // 새 프로젝트를 불러오면 백엔드 프로세스가 재시작되지 않은 한 서버 히스토리
@@ -105,16 +116,36 @@ function App() {
     })
   }, [selectedProjectId])
 
-  // poll while the currently viewed file is actively processing
+  // 프로젝트 전체에서 진행 중(전사/번역/렌더링)인 파일들 - 현재 보고 있는 파일이
+  // 아니어도 작업 큐 패널에 표시하고 진행률을 갱신하기 위해 필요합니다.
+  const activeTasks: QueuedTask[] = projects.flatMap((p) =>
+    p.items
+      .filter((i) => ACTIVE_STATUSES.has(i.status))
+      .map((i) => ({ projectId: p.id, projectName: projectLabel(p), item: i })),
+  )
+  const activeTaskKey = activeTasks.map((t) => `${t.projectId}:${t.item.id}`).join(',')
+
+  // 진행 중인 작업이 하나라도 있으면 해당 프로젝트들을 주기적으로 다시 불러와
+  // 진행률/완료 여부를 갱신합니다 - 지금 보고 있는 파일이 아니어도 동작합니다.
   useEffect(() => {
-    if (!project || !item || !ACTIVE_STATUSES.has(item.status)) return
+    if (activeTasks.length === 0) return
+    const projectIds = Array.from(new Set(activeTasks.map((t) => t.projectId)))
     const interval = setInterval(async () => {
-      const refreshed = await getProject(project.id)
-      setProject(refreshed)
-      setProjects((prev) => prev.map((p) => (p.id === refreshed.id ? refreshed : p)))
+      // 한 프로젝트 조회가 실패해도(일시적 오류, 다른 탭에서의 삭제 등) 나머지
+      // 활성 프로젝트들의 진행률 갱신까지 함께 누락되지 않도록 개별적으로 처리합니다.
+      const results = await Promise.allSettled(projectIds.map((id) => getProject(id)))
+      const refreshed = results
+        .filter((r): r is PromiseFulfilledResult<Project> => r.status === 'fulfilled')
+        .map((r) => r.value)
+      if (refreshed.length === 0) return
+      setProjects((prev) => prev.map((p) => refreshed.find((r) => r.id === p.id) ?? p))
+      setProject((prev) => (prev ? refreshed.find((r) => r.id === prev.id) ?? prev : prev))
     }, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [project, item])
+    // activeTaskKey is a stable summary of activeTasks' identity - re-deriving
+    // activeTasks itself every render would restart the interval constantly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTaskKey])
 
   // loop the selected segment when enabled
   useEffect(() => {
@@ -164,43 +195,11 @@ function App() {
       )
       setProject((prev) => (prev && prev.id === targetProjectId ? { ...prev, items: [...prev.items, ...newItems] } : prev))
       setSelectedItemId((prev) => prev ?? newItems[0]?.id ?? null)
-      // 새로 추가된 파일들은 파일마다 별도로 관리되면서, 사용자가 하나씩 열어
-      // "전사 시작"을 누르지 않아도 순서대로 자동 전사되도록 대기열에 넣습니다.
-      setTranscribeQueue((prev) => [
-        ...prev,
-        ...newItems.map((i) => ({ projectId: targetProjectId as string, itemId: i.id })),
-      ])
+      // 업로드만으로는 아무 작업도 자동 시작하지 않습니다 - 각 파일을 선택하고
+      // "전사 시작"을 명시적으로 눌러야 처리가 시작됩니다.
     },
     [selectedProjectId],
   )
-
-  // 대기열이 비어있지 않고 현재 처리 중인 항목이 없으면 다음 항목의 전사를 시작합니다.
-  useEffect(() => {
-    if (activeQueueEntry || transcribeQueue.length === 0) return
-    const next = transcribeQueue[0]
-    setTranscribeQueue((prev) => prev.slice(1))
-    setActiveQueueEntry(next)
-    transcribeItem(next.projectId, next.itemId, batchModel).then((started) => {
-      applyItemUpdate(next.projectId, started)
-    })
-  }, [transcribeQueue, activeQueueEntry, batchModel, applyItemUpdate])
-
-  // 현재 대기열에서 처리 중인 파일을 별도로 폴링합니다 - 사용자가 다른 파일을
-  // 보고 있어도 백그라운드에서 전사가 계속 진행/완료되어야 하므로, "선택된
-  // 파일만 폴링"하는 위 effect와는 독립적으로 동작합니다.
-  useEffect(() => {
-    if (!activeQueueEntry) return
-    const interval = setInterval(async () => {
-      const refreshedProject = await getProject(activeQueueEntry.projectId)
-      setProjects((prev) => prev.map((p) => (p.id === refreshedProject.id ? refreshedProject : p)))
-      setProject((prev) => (prev?.id === refreshedProject.id ? refreshedProject : prev))
-      const refreshedItem = refreshedProject.items.find((i) => i.id === activeQueueEntry.itemId)
-      if (!refreshedItem || refreshedItem.status !== 'transcribing') {
-        setActiveQueueEntry(null)
-      }
-    }, POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
-  }, [activeQueueEntry])
 
   const handleItemUpdated = useCallback(
     (updatedItem: MediaItem) => {
@@ -218,7 +217,6 @@ function App() {
       setProjects((prev) =>
         prev.map((p) => (p.id === project.id ? { ...p, items: p.items.filter((i) => i.id !== itemId) } : p)),
       )
-      setTranscribeQueue((prev) => prev.filter((entry) => entry.itemId !== itemId))
       if (selectedItemId === itemId) {
         const remaining = project.items.filter((i) => i.id !== itemId)
         setSelectedItemId(remaining[0]?.id ?? null)
@@ -236,7 +234,6 @@ function App() {
   const handleProjectDeleted = useCallback(
     (projectId: string) => {
       setProjects((prev) => prev.filter((p) => p.id !== projectId))
-      setTranscribeQueue((prev) => prev.filter((entry) => entry.projectId !== projectId))
       if (selectedProjectId === projectId) {
         setSelectedProjectId(null)
       }
@@ -493,25 +490,21 @@ function App() {
     setReviewDiffs((prev) => prev.filter((entry) => entry !== diff))
   }, [])
 
+  const handleSelectTask = useCallback(
+    (projectId: string, itemId: string) => {
+      if (projectId === selectedProjectId) {
+        setSelectedItemId(itemId)
+        const targetItem = project?.items.find((i) => i.id === itemId)
+        setSelectedSegmentId(targetItem?.segments[0]?.id ?? null)
+        return
+      }
+      pendingItemIdRef.current = itemId
+      setSelectedProjectId(projectId)
+    },
+    [selectedProjectId, project],
+  )
+
   const toasts: Toast[] = []
-  if (activeQueueEntry || transcribeQueue.length > 0) {
-    const activeItem = activeQueueEntry
-      ? projects
-          .find((p) => p.id === activeQueueEntry.projectId)
-          ?.items.find((i) => i.id === activeQueueEntry.itemId)
-      : undefined
-    const queueMessage = [
-      '일괄 전사 진행 중',
-      activeItem ? `: ${activeItem.filename}` : '',
-      transcribeQueue.length > 0 ? ` (대기 중 ${transcribeQueue.length}개)` : '',
-    ].join('')
-    toasts.push({
-      id: 'transcribe-queue',
-      tone: 'info',
-      message: queueMessage,
-      progress: activeItem?.progress ?? null,
-    })
-  }
   if (reviewUnknownIds.length > 0) {
     toasts.push({
       id: 'review-unknown-ids',
@@ -550,10 +543,9 @@ function App() {
         onGlossaryUpdated={handleProjectUpdated}
         onStyleUpdated={handleProjectUpdated}
         onReviewImported={handleReviewImported}
-        batchModel={batchModel}
-        onBatchModelChange={setBatchModel}
       />
 
+      <TaskQueuePanel tasks={activeTasks} onSelectTask={handleSelectTask} />
       <ProgressToast toasts={toasts} />
 
       {!project && (
@@ -561,7 +553,7 @@ function App() {
           <p className="app-empty-hint-icon" aria-hidden="true">
             🎬
           </p>
-          <p>영상이나 오디오 파일을 업로드하면 자동으로 전사가 시작됩니다.</p>
+          <p>영상이나 오디오 파일을 업로드한 뒤, 파일을 선택하고 "전사 시작"을 눌러주세요.</p>
           <p className="hint-text">상단의 "+ 업로드" 버튼을 누르거나, 파일을 이 창에 끌어다 놓으세요.</p>
         </div>
       )}

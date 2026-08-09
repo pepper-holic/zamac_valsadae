@@ -361,6 +361,86 @@
   margin-bottom: 4px;
 }
 
+/* ---------- Task queue ---------- */
+.task-queue-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--code-bg);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.task-queue-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-h);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.task-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-queue-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+.task-queue-chip:hover {
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+
+.task-queue-chip-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-queue-chip-status {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.task-queue-chip-elapsed {
+  font-family: var(--mono);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.task-queue-chip-progress {
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.task-queue-chip-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms linear;
+}
+
 /* ---------- Progress toasts ---------- */
 .progress-toast-stack {
   position: fixed;

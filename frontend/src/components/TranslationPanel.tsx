@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { MediaItem, Project, TranslationDirection, TranslationEngine } from '../api/types'
 import { cancelItem, getModelStatus, translateItem, updateGlossary } from '../api/client'
+import { formatClock } from '../utils/time'
+import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
 type Props = {
   project: Project
@@ -35,6 +37,7 @@ export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }
   const isBusy = item.status === 'translating' || item.status === 'transcribing'
   const isModelCached = translationCacheStatus[direction]
   const isDownloadingModel = item.status === 'translating' && item.stage === 'downloading_model'
+  const elapsedSeconds = useElapsedSeconds(item.status === 'translating')
 
   async function handleTranslate() {
     setError(null)
@@ -131,8 +134,8 @@ export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }
         <div className="progress-block">
           <div className="progress-bar progress-bar-indeterminate" />
           <p className="hint-text">
-            번역 모델 다운로드 중입니다 — 인터넷 연결이 필요하며 수 분 정도 걸릴 수 있습니다. (최초
-            1회만 필요)
+            번역 모델 다운로드 중입니다 (경과 {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}
+            ) — 인터넷 연결이 필요하며 수 분 정도 걸릴 수 있습니다. (최초 1회만 필요)
           </p>
         </div>
       )}
@@ -145,8 +148,9 @@ export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }
             />
           </div>
           <p className="hint-text">
-            {Math.round((item.progress ?? 0) * 100)}% 처리 중 — 문장 수에 따라 시간이 걸릴 수
-            있습니다.
+            {Math.round((item.progress ?? 0) * 100)}% 처리 중 (경과{' '}
+            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) — 문장 수에 따라 시간이
+            걸릴 수 있습니다.
           </p>
         </div>
       )}

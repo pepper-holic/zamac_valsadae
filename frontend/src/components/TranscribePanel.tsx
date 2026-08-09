@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { MediaItem, Project } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
 import { cancelItem, getModelStatus, transcribeItem } from '../api/client'
+import { formatClock } from '../utils/time'
+import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
 type Props = {
   project: Project
@@ -44,6 +46,7 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
 
   const isModelCached = whisperCacheStatus[model]
   const isDownloadingModel = item.status === 'transcribing' && item.stage === 'downloading_model'
+  const elapsedSeconds = useElapsedSeconds(item.status === 'transcribing')
 
   async function handleTranscribe() {
     setError(null)
@@ -120,8 +123,9 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
         <div className="progress-block">
           <div className="progress-bar progress-bar-indeterminate" />
           <p className="hint-text">
-            모델 다운로드 중입니다 — 인터넷 연결이 필요하며 모델 크기에 따라 수 분~수십 분이 걸릴 수
-            있습니다. (최초 1회만 필요)
+            모델 다운로드 중입니다 (경과 {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) —
+            인터넷 연결이 필요하며 모델 크기에 따라 수 분~수십 분이 걸릴 수 있습니다. (최초 1회만
+            필요)
           </p>
         </div>
       )}
@@ -134,8 +138,9 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
             />
           </div>
           <p className="hint-text">
-            {Math.round((item.progress ?? 0) * 100)}% 처리 중 — 모델을 로드하고 음성을 인식하는
-            중입니다. 모델 크기에 따라 수 분이 걸릴 수 있습니다.
+            {Math.round((item.progress ?? 0) * 100)}% 처리 중 (경과{' '}
+            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) — 모델을 로드하고 음성을
+            인식하는 중입니다. 모델 크기에 따라 수 분이 걸릴 수 있습니다.
           </p>
         </div>
       )}
