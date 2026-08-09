@@ -3,12 +3,14 @@
   --text-h: #08060d;
   --bg: #f7f6f9;
   --surface: #ffffff;
+  --surface-translucent: rgba(255, 255, 255, 0.82);
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
   --accent: #7c3aed;
   --accent-bg: rgba(124, 58, 237, 0.1);
   --accent-border: rgba(124, 58, 237, 0.5);
   --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.1);
   --success: #16a34a;
   --warning: #d97706;
   --shadow:
@@ -33,12 +35,14 @@
     --text-h: #f3f1f6;
     --bg: #121017;
     --surface: #1b1922;
+    --surface-translucent: rgba(27, 25, 34, 0.72);
     --border: #2e2b38;
     --code-bg: #1f1d28;
     --accent: #b794f6;
     --accent-bg: rgba(183, 148, 246, 0.15);
     --accent-border: rgba(183, 148, 246, 0.5);
     --danger: #f87171;
+    --danger-bg: rgba(248, 113, 113, 0.15);
     --success: #4ade80;
     --warning: #fbbf24;
     --shadow:
@@ -52,6 +56,22 @@
 
 body {
   margin: 0;
+}
+
+/* 브라우저 기본 버튼/셀렉트 크롬이 그대로 남지 않도록 - 스타일 클래스 없이
+   렌더링되는 컨트롤이 있으면 "안 만든 것처럼" 보이는 문제를 막는다. */
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
 }
 
 #root {

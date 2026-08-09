@@ -61,30 +61,69 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
   padding: 10px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
-  position: relative;
-  z-index: 10;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .toolbar {
+    background: var(--surface-translucent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+.toolbar-zone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 .toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: -0.2px;
   color: var(--text-h);
   white-space: nowrap;
 }
 
-.toolbar-project-switch {
+.toolbar-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.toolbar-workspace-switcher {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.toolbar-project-switch select {
+.toolbar-select {
   padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -94,33 +133,61 @@
   max-width: 260px;
 }
 
+.toolbar-ghost-button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.toolbar-ghost-button:hover {
+  background: var(--code-bg);
+  color: var(--text-h);
+}
+.toolbar-ghost-button:disabled {
+  opacity: 0.5;
+}
+
+.toolbar-danger-ghost:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .upload-button.compact {
   padding: 6px 12px;
   font-size: 12px;
 }
 
-.toolbar-actions {
+.toolbar-segmented {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--code-bg);
   margin-left: auto;
 }
 
 .toolbar-tab {
-  padding: 8px 14px;
+  padding: 7px 13px;
   border-radius: 6px;
   border: none;
   background: transparent;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 .toolbar-tab:hover {
-  background: var(--accent-bg);
+  color: var(--text-h);
 }
 .toolbar-tab.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
 }
 
 .toolbar-dropdown {
@@ -139,18 +206,21 @@
   margin: 0;
 }
 
-.toolbar-help-button {
-  padding: 8px 12px;
-  border-radius: 6px;
+.toolbar-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
   flex-shrink: 0;
 }
-.toolbar-help-button:hover {
+.toolbar-icon-button:hover {
   border-color: var(--accent-border);
   color: var(--accent);
 }

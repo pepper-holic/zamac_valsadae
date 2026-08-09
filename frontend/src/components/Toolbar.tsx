@@ -159,49 +159,65 @@ export function Toolbar({
     }
   }
 
+  const tabs: { key: MenuKey; label: string; tip: string }[] = [
+    { key: 'transcribe', label: '전사', tip: 'Whisper로 음성을 인식해 자막(문장 목록)을 만듭니다.' },
+    { key: 'translate', label: '번역', tip: '추출된 문장을 한↔영으로 번역합니다.' },
+    { key: 'style', label: '자막 스타일', tip: '자막의 글꼴/색상/위치/효과를 설정하고 미리보기에 바로 반영합니다.' },
+    { key: 'export', label: '내보내기', tip: 'SRT/VTT/JSON 자막 파일로 내려받습니다.' },
+    { key: 'review', label: 'AI 검수', tip: '검수용 파일을 내려받아 AI 챗에 올려 교정받고, 결과를 다시 불러옵니다.' },
+  ]
+
   return (
     <header className="toolbar" ref={toolbarRef}>
-      <div className="toolbar-brand">Zamak_Valsadae</div>
-
-      <div className="toolbar-project-switch">
-        <select
-          value={selectedProjectId ?? ''}
-          onChange={(event) => onSelectProject(event.target.value)}
-          data-tip="여러 파일을 묶어 관리하는 프로젝트를 선택합니다."
-        >
-          <option value="" disabled>
-            프로젝트 선택
-          </option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {projectLabel(p)} ({p.items.length}개 파일)
+      <div className="toolbar-zone toolbar-zone-brand">
+        <div className="toolbar-brand">
+          <span className="toolbar-brand-mark" aria-hidden="true">Z</span>
+          Zamak_Valsadae
+        </div>
+        <div className="toolbar-divider" aria-hidden="true" />
+        <div className="toolbar-workspace-switcher">
+          <select
+            className="toolbar-select"
+            value={selectedProjectId ?? ''}
+            onChange={(event) => onSelectProject(event.target.value)}
+            data-tip="여러 파일을 묶어 관리하는 프로젝트를 선택합니다."
+          >
+            <option value="" disabled>
+              프로젝트 선택
             </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="secondary"
-          onClick={handleNewProject}
-          data-tip="파일 여러 개를 묶어 관리할 새 프로젝트를 만듭니다."
-        >
-          + 새 프로젝트
-        </button>
-        {project && (
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {projectLabel(p)} ({p.items.length}개 파일)
+              </option>
+            ))}
+          </select>
           <button
             type="button"
-            className="project-delete-button"
-            onClick={handleDeleteProject}
-            disabled={isDeletingProject}
-            data-tip="현재 선택된 프로젝트를 통째로 삭제합니다 (안의 모든 파일 포함, 되돌릴 수 없음)."
+            className="toolbar-ghost-button"
+            onClick={handleNewProject}
+            data-tip="파일 여러 개를 묶어 관리할 새 프로젝트를 만듭니다."
           >
-            {isDeletingProject ? '삭제 중...' : '프로젝트 삭제'}
+            + 새 프로젝트
           </button>
-        )}
+          {project && (
+            <button
+              type="button"
+              className="toolbar-ghost-button toolbar-danger-ghost"
+              onClick={handleDeleteProject}
+              disabled={isDeletingProject}
+              data-tip="현재 선택된 프로젝트를 통째로 삭제합니다 (안의 모든 파일 포함, 되돌릴 수 없음)."
+            >
+              {isDeletingProject ? '삭제 중...' : '프로젝트 삭제'}
+            </button>
+          )}
+        </div>
       </div>
 
       {project && (
-        <div className="toolbar-project-switch">
+        <div className="toolbar-zone toolbar-zone-files">
+          <div className="toolbar-divider" aria-hidden="true" />
           <select
+            className="toolbar-select"
             value={selectedItemId ?? ''}
             onChange={(event) => onSelectItem(event.target.value)}
             data-tip="이 프로젝트 안의 파일 중 작업할 파일을 선택합니다."
@@ -234,6 +250,7 @@ export function Toolbar({
             />
           </label>
           <select
+            className="toolbar-select"
             value={batchModel}
             onChange={(event) => onBatchModelChange(event.target.value)}
             data-tip="여러 파일을 한 번에 올렸을 때 자동 전사에 사용할 Whisper 모델 크기입니다."
@@ -247,7 +264,7 @@ export function Toolbar({
           {item && (
             <button
               type="button"
-              className="project-delete-button"
+              className="toolbar-ghost-button toolbar-danger-ghost"
               onClick={handleDeleteItem}
               disabled={isDeletingItem}
               data-tip="현재 선택된 파일만 프로젝트에서 삭제합니다 (되돌릴 수 없음)."
@@ -280,57 +297,31 @@ export function Toolbar({
       )}
 
       {item && (
-        <div className="toolbar-actions">
-          <button
-            type="button"
-            className={openMenu === 'transcribe' ? 'toolbar-tab active' : 'toolbar-tab'}
-            onClick={() => toggleMenu('transcribe')}
-            data-tip="Whisper로 음성을 인식해 자막(문장 목록)을 만듭니다."
-          >
-            전사
-          </button>
-          <button
-            type="button"
-            className={openMenu === 'translate' ? 'toolbar-tab active' : 'toolbar-tab'}
-            onClick={() => toggleMenu('translate')}
-            data-tip="추출된 문장을 한↔영으로 번역합니다."
-          >
-            번역
-          </button>
-          <button
-            type="button"
-            className={openMenu === 'style' ? 'toolbar-tab active' : 'toolbar-tab'}
-            onClick={() => toggleMenu('style')}
-            data-tip="자막의 글꼴/색상/위치/효과를 설정하고 미리보기에 바로 반영합니다."
-          >
-            자막 스타일
-          </button>
-          <button
-            type="button"
-            className={openMenu === 'export' ? 'toolbar-tab active' : 'toolbar-tab'}
-            onClick={() => toggleMenu('export')}
-            data-tip="SRT/VTT/JSON 자막 파일로 내려받습니다."
-          >
-            내보내기
-          </button>
-          <button
-            type="button"
-            className={openMenu === 'review' ? 'toolbar-tab active' : 'toolbar-tab'}
-            onClick={() => toggleMenu('review')}
-            data-tip="검수용 파일을 내려받아 AI 챗에 올려 교정받고, 결과를 다시 불러옵니다."
-          >
-            AI 검수
-          </button>
-        </div>
+        <nav className="toolbar-segmented" aria-label="자막 도구">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              className={openMenu === tab.key ? 'toolbar-tab active' : 'toolbar-tab'}
+              onClick={() => toggleMenu(tab.key)}
+              data-tip={tab.tip}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       )}
+
+      {item && <div className="toolbar-divider" aria-hidden="true" />}
 
       <button
         type="button"
-        className="toolbar-help-button"
+        className="toolbar-icon-button"
         onClick={() => setIsHelpOpen(true)}
         data-tip="사용법 가이드를 엽니다."
+        aria-label="도움말"
       >
-        ? 도움말
+        ?
       </button>
 
       {project && item && openMenu && (
