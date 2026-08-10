@@ -44,7 +44,7 @@ class Segment(BaseModel):
 
 class SubtitleStyle(BaseModel):
     font_family: str = "Pretendard"
-    font_size: int = 32
+    font_size: int = 12
     font_weight: Literal["normal", "bold"] = "bold"
     color: str = "#FFFFFF"
     outline_color: str = "#000000"

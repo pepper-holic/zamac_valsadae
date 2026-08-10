@@ -50,6 +50,19 @@ const TICK_COUNT = 6
 const DETAIL_PADDING_RATIO = 0.5
 const MIN_DETAIL_PADDING = 1
 
+type AspectOption = { id: string; label: string; ratio: number | null }
+
+// ratio = width / height; null means "원본" (read from the loaded video's own dimensions).
+const ASPECT_OPTIONS: AspectOption[] = [
+  { id: 'auto', label: '원본 비율', ratio: null },
+  { id: '16:9', label: '16:9 · 유튜브', ratio: 16 / 9 },
+  { id: '9:16', label: '9:16 · 쇼츠/릴스', ratio: 9 / 16 },
+  { id: '1:1', label: '1:1 · 정사각형', ratio: 1 },
+  { id: '4:5', label: '4:5 · 인스타 피드', ratio: 4 / 5 },
+]
+const DEFAULT_ASPECT_ID = '16:9'
+const ASPECT_STORAGE_KEY = 'zv_previewAspectRatio'
+
 function buildTicks(duration: number): number[] {
   if (duration <= 0) return []
   return Array.from({ length: TICK_COUNT }, (_, i) => (duration * i) / (TICK_COUNT - 1))
@@ -109,6 +122,18 @@ export function VideoStage({
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [zoomIndex, setZoomIndex] = useState(MIN_ZOOM_INDEX)
   const zoom = ZOOM_LEVELS[zoomIndex]
+  const [aspectRatioId, setAspectRatioId] = useState<string>(
+    () => window.localStorage.getItem(ASPECT_STORAGE_KEY) ?? DEFAULT_ASPECT_ID,
+  )
+  const [naturalRatio, setNaturalRatio] = useState<number | null>(null)
+
+  useEffect(() => {
+    window.localStorage.setItem(ASPECT_STORAGE_KEY, aspectRatioId)
+  }, [aspectRatioId])
+
+  useEffect(() => {
+    setNaturalRatio(null)
+  }, [src])
 
   useEffect(() => {
     if (!dragState) return
@@ -209,15 +234,42 @@ export function VideoStage({
     onSeek(detailWindow.windowStart + ratio * detailWindowDuration)
   }
 
+  function handleLoadedMetadata(event: React.SyntheticEvent<HTMLVideoElement>) {
+    const video = event.currentTarget
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      setNaturalRatio(video.videoWidth / video.videoHeight)
+    }
+  }
+
+  const selectedAspect = ASPECT_OPTIONS.find((option) => option.id === aspectRatioId) ?? ASPECT_OPTIONS[1]
+  const effectiveRatio = selectedAspect.ratio ?? naturalRatio ?? 16 / 9
+  const isPortraitFrame = effectiveRatio < 1
+  const videoFrameStyle: React.CSSProperties = isPortraitFrame
+    ? { aspectRatio: String(effectiveRatio), height: 'min(60vh, 100%)', width: 'auto', maxWidth: '100%' }
+    : { aspectRatio: String(effectiveRatio), width: '100%', maxHeight: 'min(60vh, 100%)' }
+
   return (
     <section className="video-stage">
-      <div className="video-frame">
+      <div className="video-frame-controls">
+        <label className="aspect-ratio-select" data-tip="플랫폼에 맞춰 미리보기 화면비를 바꿉니다. 원본과 비율이 다르면 남는 영역은 검정으로 채워집니다.">
+          화면비율
+          <select value={aspectRatioId} onChange={(event) => setAspectRatioId(event.target.value)}>
+            {ASPECT_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="video-frame" style={videoFrameStyle}>
         <video
           ref={videoRef}
           className="video-player"
           src={src}
           onTimeUpdate={(event) => onTimeUpdate(event.currentTarget.currentTime)}
           onDurationChange={(event) => onDurationChange(event.currentTarget.duration)}
+          onLoadedMetadata={handleLoadedMetadata}
           onPlay={() => onPlayStateChange(true)}
           onPause={() => onPlayStateChange(false)}
         />

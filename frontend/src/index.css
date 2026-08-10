@@ -13,6 +13,7 @@
   --danger-bg: rgba(220, 38, 38, 0.1);
   --success: #16a34a;
   --warning: #d97706;
+  --karaoke-highlight: #f5b400;
   --shadow:
     rgba(0, 0, 0, 0.08) 0 10px 15px -3px, rgba(0, 0, 0, 0.04) 0 4px 6px -2px;
 
@@ -45,6 +46,7 @@
     --danger-bg: rgba(248, 113, 113, 0.15);
     --success: #4ade80;
     --warning: #fbbf24;
+    --karaoke-highlight: #ffd54a;
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }

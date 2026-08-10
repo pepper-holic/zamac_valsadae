@@ -13,7 +13,7 @@ def _segment(text: str = "안녕하세요", start: float = 0.0, end: float = 2.0
 def test_build_ass_includes_default_style_values():
     ass = render_service.build_ass([_segment()], SubtitleStyle())
 
-    assert "Style: Default,Pretendard,32" in ass
+    assert "Style: Default,Pretendard,12" in ass
     assert "Dialogue: 0,0:00:00.00,0:00:02.00,Default" in ass
     assert "안녕하세요" in ass
 

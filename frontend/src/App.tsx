@@ -45,11 +45,11 @@ function readStoredWidth(key: string, fallback: number): number {
   return Number.isFinite(stored) && stored > 0 ? stored : fallback
 }
 
-const TOOL_TITLES: Record<ToolKey, string> = {
-  transcribe: '전사',
-  translate: '번역',
-  style: '자막 스타일',
-  review: 'AI 검수',
+const TOOL_DESCRIPTIONS: Record<ToolKey, string> = {
+  transcribe: 'Whisper로 음성을 인식해 문장 목록을 만듭니다.',
+  translate: '추출된 문장을 한↔영으로 번역합니다.',
+  style: '글꼴/색상/위치/효과를 설정해 미리보기에 반영합니다.',
+  review: '검수용 파일을 내려받아 AI 챗에서 교정받고 다시 불러옵니다.',
 }
 
 type HistoryState = { canUndo: boolean; canRedo: boolean }
@@ -648,7 +648,7 @@ function App() {
               data-tip="드래그해서 패널 너비를 조정합니다."
             />
             <div className="tool-panel-column-head">
-              <h3>{TOOL_TITLES[activeTool]}</h3>
+              <p className="tool-panel-column-desc">{TOOL_DESCRIPTIONS[activeTool]}</p>
             </div>
             {activeTool === 'transcribe' && (
               <TranscribePanel project={project} item={item} onStarted={handleItemUpdated} />

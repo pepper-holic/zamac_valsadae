@@ -95,31 +95,35 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
       <h2>자막 스타일</h2>
 
       <div className="panel-row">
-        <label htmlFor="style-font">폰트</label>
-        <select
-          id="style-font"
-          value={style.font_family}
-          onChange={(event) => applyStyle({ font_family: event.target.value })}
-        >
-          {FONT_OPTIONS.map((font) => (
-            <option key={font} value={font}>
-              {font}
-            </option>
-          ))}
-        </select>
+        <div className="panel-field">
+          <label htmlFor="style-font">폰트</label>
+          <select
+            id="style-font"
+            value={style.font_family}
+            onChange={(event) => applyStyle({ font_family: event.target.value })}
+          >
+            {FONT_OPTIONS.map((font) => (
+              <option key={font} value={font}>
+                {font}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <label htmlFor="style-size">크기</label>
-        <input
-          id="style-size"
-          type="number"
-          min={12}
-          max={96}
-          value={style.font_size}
-          onChange={(event) => applyStyle({ font_size: Number(event.target.value) })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-size">크기</label>
+          <input
+            id="style-size"
+            type="number"
+            min={12}
+            max={96}
+            value={style.font_size}
+            onChange={(event) => applyStyle({ font_size: Number(event.target.value) })}
+          />
+        </div>
 
         <label
-          className="checkbox-label"
+          className="checkbox-label panel-field"
           data-tip="굵게/보통 글꼴 두께를 전환합니다."
         >
           <input
@@ -134,43 +138,51 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
       </div>
 
       <div className="panel-row">
-        <label htmlFor="style-color">글자색</label>
-        <input
-          id="style-color"
-          type="color"
-          value={style.color}
-          onChange={(event) => applyStyle({ color: event.target.value })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-color">글자색</label>
+          <input
+            id="style-color"
+            type="color"
+            value={style.color}
+            onChange={(event) => applyStyle({ color: event.target.value })}
+          />
+        </div>
 
-        <label htmlFor="style-outline-color">외곽선색</label>
-        <input
-          id="style-outline-color"
-          type="color"
-          value={style.outline_color}
-          onChange={(event) => applyStyle({ outline_color: event.target.value })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-outline-color">외곽선색</label>
+          <input
+            id="style-outline-color"
+            type="color"
+            value={style.outline_color}
+            onChange={(event) => applyStyle({ outline_color: event.target.value })}
+          />
+        </div>
 
-        <label htmlFor="style-outline-width">외곽선 두께</label>
-        <input
-          id="style-outline-width"
-          type="number"
-          min={0}
-          max={10}
-          value={style.outline_width}
-          onChange={(event) => applyStyle({ outline_width: Number(event.target.value) })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-outline-width">외곽선 두께</label>
+          <input
+            id="style-outline-width"
+            type="number"
+            min={0}
+            max={10}
+            value={style.outline_width}
+            onChange={(event) => applyStyle({ outline_width: Number(event.target.value) })}
+          />
+        </div>
       </div>
 
       <div className="panel-row">
-        <label htmlFor="style-background">배경색</label>
-        <input
-          id="style-background"
-          type="color"
-          value={style.background ?? '#000000'}
-          onChange={(event) => applyStyle({ background: event.target.value })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-background">배경색</label>
+          <input
+            id="style-background"
+            type="color"
+            value={style.background ?? '#000000'}
+            onChange={(event) => applyStyle({ background: event.target.value })}
+          />
+        </div>
         <label
-          className="checkbox-label"
+          className="checkbox-label panel-field"
           data-tip="배경색을 사용하지 않고 외곽선만으로 가독성을 확보합니다."
         >
           <input
@@ -181,49 +193,55 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
           배경 없음
         </label>
 
-        <label htmlFor="style-position">위치</label>
-        <select
-          id="style-position"
-          value={style.position}
-          onChange={(event) =>
-            applyStyle({ position: event.target.value as SubtitleStyle['position'] })
-          }
-        >
-          <option value="bottom">하단</option>
-          <option value="top">상단</option>
-          <option value="custom">사용자 지정</option>
-        </select>
+        <div className="panel-field">
+          <label htmlFor="style-position">위치</label>
+          <select
+            id="style-position"
+            value={style.position}
+            onChange={(event) =>
+              applyStyle({ position: event.target.value as SubtitleStyle['position'] })
+            }
+          >
+            <option value="bottom">하단</option>
+            <option value="top">상단</option>
+            <option value="custom">사용자 지정</option>
+          </select>
+        </div>
       </div>
 
       <div className="panel-row">
-        <label htmlFor="style-fade-in" data-tip="문장이 나타날 때 밀리초 단위로 서서히 나타납니다.">
-          페이드 인(ms)
-        </label>
-        <input
-          id="style-fade-in"
-          type="number"
-          min={0}
-          max={2000}
-          step={50}
-          value={style.fade_in_ms}
-          onChange={(event) => applyStyle({ fade_in_ms: Number(event.target.value) })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-fade-in" data-tip="문장이 나타날 때 밀리초 단위로 서서히 나타납니다.">
+            페이드 인(ms)
+          </label>
+          <input
+            id="style-fade-in"
+            type="number"
+            min={0}
+            max={2000}
+            step={50}
+            value={style.fade_in_ms}
+            onChange={(event) => applyStyle({ fade_in_ms: Number(event.target.value) })}
+          />
+        </div>
 
-        <label htmlFor="style-fade-out" data-tip="문장이 사라질 때 밀리초 단위로 서서히 사라집니다.">
-          페이드 아웃(ms)
-        </label>
-        <input
-          id="style-fade-out"
-          type="number"
-          min={0}
-          max={2000}
-          step={50}
-          value={style.fade_out_ms}
-          onChange={(event) => applyStyle({ fade_out_ms: Number(event.target.value) })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-fade-out" data-tip="문장이 사라질 때 밀리초 단위로 서서히 사라집니다.">
+            페이드 아웃(ms)
+          </label>
+          <input
+            id="style-fade-out"
+            type="number"
+            min={0}
+            max={2000}
+            step={50}
+            value={style.fade_out_ms}
+            onChange={(event) => applyStyle({ fade_out_ms: Number(event.target.value) })}
+          />
+        </div>
 
         <label
-          className="checkbox-label"
+          className="checkbox-label panel-field"
           data-tip="단어 타임스탬프를 이용해 재생 중인 단어를 강조 표시합니다 (노래방 자막 스타일)."
         >
           <input
@@ -237,7 +255,7 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
 
       <div className="panel-row">
         <label
-          className="checkbox-label"
+          className="checkbox-label panel-field"
           data-tip="긴 문장은 마침표 기준으로, 한 문장이 너무 길면 단어 기준으로 자동 줄바꿈합니다."
         >
           <input
@@ -248,16 +266,18 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
           자동 줄바꿈
         </label>
 
-        <label htmlFor="style-max-line-chars">줄당 최대 글자수</label>
-        <input
-          id="style-max-line-chars"
-          type="number"
-          min={6}
-          max={60}
-          value={style.max_line_chars}
-          disabled={!style.auto_line_break}
-          onChange={(event) => applyStyle({ max_line_chars: Number(event.target.value) })}
-        />
+        <div className="panel-field">
+          <label htmlFor="style-max-line-chars">줄당 최대 글자수</label>
+          <input
+            id="style-max-line-chars"
+            type="number"
+            min={6}
+            max={60}
+            value={style.max_line_chars}
+            disabled={!style.auto_line_break}
+            onChange={(event) => applyStyle({ max_line_chars: Number(event.target.value) })}
+          />
+        </div>
 
         <button
           type="button"

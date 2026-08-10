@@ -82,7 +82,15 @@
 .toolbar-zone {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  .toolbar-zone {
+    background: var(--code-bg);
+  }
 }
 
 .toolbar-divider {
@@ -156,6 +164,17 @@
   color: var(--danger);
 }
 
+.toolbar-primary-ghost {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+}
+.toolbar-primary-ghost:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
 .upload-button.compact {
   padding: 6px 12px;
   font-size: 12px;
@@ -222,6 +241,30 @@
 .toolbar-icon-button:hover {
   border-color: var(--accent-border);
   color: var(--accent);
+}
+.toolbar-icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-history-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.toolbar-history-group .toolbar-icon-button {
+  width: 28px;
+  height: 26px;
+  border: none;
+  background: transparent;
+}
+.toolbar-history-group .toolbar-icon-button:hover:not(:disabled) {
+  background: var(--surface);
 }
 
 /* ---------- Help modal ---------- */
@@ -666,7 +709,7 @@
 }
 
 .tool-rail-label {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
@@ -683,15 +726,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 0;
+  padding: 12px 16px 0;
 }
-.tool-panel-column-head h3 {
+.tool-panel-column-desc {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim, var(--text));
 }
 
 .tool-panel-column .panel {
@@ -765,8 +806,33 @@
   min-height: 0;
 }
 
+.video-frame-controls {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.aspect-ratio-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.aspect-ratio-select select {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  font-size: 12px;
+}
+
 .video-frame {
   position: relative;
+  margin: 0 auto;
+  /* Fallback sizing when JS hasn't applied the inline aspect-ratio style yet;
+     VideoStage overrides width/height/aspect-ratio inline based on the
+     selected platform ratio (landscape: width-driven, portrait: height-driven). */
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: min(60vh, 100%);
@@ -810,7 +876,7 @@
 }
 
 .subtitle-karaoke-highlight {
-  color: #ffd54a;
+  color: var(--karaoke-highlight);
 }
 
 .timecode {
@@ -882,7 +948,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  min-width: 3px;
+  min-width: 5px;
   border-radius: 0;
   background: var(--accent-border);
   border-right: 1px solid var(--code-bg);
@@ -929,14 +995,14 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 9px;
   cursor: ew-resize;
 }
 .timeline-marker-handle.left {
-  left: -2px;
+  left: -4px;
 }
 .timeline-marker-handle.right {
-  right: -2px;
+  right: -4px;
 }
 
 .timeline-detail {
@@ -1214,7 +1280,7 @@
   font-size: 11px;
   color: var(--success);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.35;
 }
 .segment-list-item:hover .reviewed-toggle,
 .segment-list-item.selected .reviewed-toggle,
@@ -1231,7 +1297,7 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 0.35;
 }
 .segment-list-item:hover .segment-row-actions,
 .segment-list-item.selected .segment-row-actions {
@@ -1258,7 +1324,7 @@
 
 .segment-select-checkbox {
   flex-shrink: 0;
-  opacity: 0;
+  opacity: 0.35;
 }
 li:hover > .segment-select-checkbox,
 li:has(.segment-list-item.selected) > .segment-select-checkbox,
@@ -1390,12 +1456,16 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
 }
 
 .segment-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 .segment-filter-tab:hover {
@@ -1405,6 +1475,8 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
 .segment-filter-tab.warn.active {
   background: var(--warning);
@@ -1607,7 +1679,13 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
 .timing-actions .danger-button {
   margin-left: auto;
   color: var(--danger);
+  background: var(--danger-bg);
   border-color: var(--danger);
+  font-weight: 700;
+}
+.timing-actions .danger-button:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .keyboard-hint {
@@ -1647,7 +1725,15 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
   display: flex;
   align-items: center;
   gap: 10px;
+  row-gap: 10px;
   flex-wrap: wrap;
+}
+
+.panel-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .panel-row label {
@@ -1701,11 +1787,34 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
 .panel-row input[type='color'] {
   width: 32px;
   height: 32px;
-  padding: 2px;
-  border-radius: 6px;
+  padding: 0;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg);
   cursor: pointer;
+  overflow: hidden;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.panel-row input[type='color']:hover {
+  border-color: var(--accent-border);
+}
+.panel-row input[type='color']:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.panel-row input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.panel-row input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 7px;
+}
+.panel-row input[type='color']::-moz-color-swatch {
+  border: none;
+  border-radius: 7px;
 }
 
 .subtitle-style-panel .panel-row {

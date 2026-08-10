@@ -7,12 +7,12 @@
 - 설치 프로그램: `installer/installer.iss`(Inno Setup)로 빌드한 `.exe` — 관리자 권한 불필요,
   시작 메뉴/바탕화면 아이콘 생성.
 - 코드 서명이 안 되어 있어 실행 시 Windows SmartScreen 경고가 뜹니다 — "추가 정보 → 실행"으로
-  진행하세요. (해소하려면 코드 서명 인증서 필요 — [T.B.D], 로드맵 #29 참고)
+  진행하세요. (해소하려면 EV 코드 서명 인증서 구매 필요 — 더미: 연 30만 원대, 로드맵 #29 참고)
 - 또는 `install.bat` + `run.bat`으로 포터블 방식 실행 (Python/Node/ffmpeg를 프로젝트 폴더
   안에 격리 설치, 시스템 PATH 변경 없음).
 
-**다운로드 링크**: [T.B.D — 실제 배포 시 `installer/dist/Zamak_Valsadae_Setup.exe`를 어디에
-호스팅할지 확정 필요(예: GitHub Releases, 자체 서버)]
+**다운로드 링크 (더미)**: `https://github.com/pepper-holic/zamac_valsadae/releases/latest`
+(실제 배포 시 GitHub Releases 또는 자체 서버 호스팅 여부 확정 후 교체)
 
 ## macOS
 

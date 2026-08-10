@@ -288,7 +288,7 @@ export function SegmentList({
           onClick={() => setFilter('unreviewed')}
           data-tip="아직 검토 표시가 없는 문장입니다."
         >
-          미작업 ({unreviewedCount})
+          <span aria-hidden="true">○</span> 미작업 ({unreviewedCount})
         </button>
         <button
           type="button"
@@ -296,7 +296,7 @@ export function SegmentList({
           onClick={() => setFilter('needsCheck')}
           data-tip="전사/번역 신뢰도가 낮거나 자막 가독성 기준(초당 글자 수, 줄 길이, 지속시간)을 벗어나 사람이 확인해야 할 문장입니다."
         >
-          검토 필요 ({needsCheckCount})
+          <span aria-hidden="true">⚠</span> 검토 필요 ({needsCheckCount})
         </button>
         <button
           type="button"
@@ -311,7 +311,7 @@ export function SegmentList({
           onClick={() => setFilter('reviewed')}
           data-tip="사용자가 직접 검토 완료로 표시한 문장입니다."
         >
-          완료 ({reviewedCount})
+          <span aria-hidden="true">✓</span> 완료 ({reviewedCount})
         </button>
       </div>
 

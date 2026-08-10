@@ -172,7 +172,7 @@ export function Toolbar({
           </select>
           <button
             type="button"
-            className="toolbar-ghost-button"
+            className="toolbar-ghost-button toolbar-primary-ghost"
             onClick={handleNewProject}
             data-tip="파일 여러 개를 묶어 관리할 새 프로젝트를 만듭니다."
           >
@@ -266,7 +266,7 @@ export function Toolbar({
       <div className="toolbar-zone-spacer" />
 
       {item && (
-        <>
+        <div className="toolbar-history-group">
           <button
             type="button"
             className="toolbar-icon-button"
@@ -287,7 +287,7 @@ export function Toolbar({
           >
             ↷
           </button>
-        </>
+        </div>
       )}
 
       <button
