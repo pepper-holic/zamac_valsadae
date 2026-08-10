@@ -121,11 +121,16 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
       )}
       {item.status === 'transcribing' && isDownloadingModel && (
         <div className="progress-block">
-          <div className="progress-bar progress-bar-indeterminate" />
+          <div className="progress-bar">
+            <div
+              className="progress-bar-fill"
+              style={{ width: `${Math.round((item.progress ?? 0) * 100)}%` }}
+            />
+          </div>
           <p className="hint-text">
-            모델 다운로드 중입니다 (경과 {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) —
-            인터넷 연결이 필요하며 모델 크기에 따라 수 분~수십 분이 걸릴 수 있습니다. (최초 1회만
-            필요)
+            모델 다운로드 중 {Math.round((item.progress ?? 0) * 100)}% (경과{' '}
+            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) — 인터넷 연결이
+            필요하며 모델 크기에 따라 수 분~수십 분이 걸릴 수 있습니다. (최초 1회만 필요)
           </p>
         </div>
       )}

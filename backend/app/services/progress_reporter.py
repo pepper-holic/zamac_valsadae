@@ -30,7 +30,7 @@ def make_progress_reporter(
 def make_stage_reporter(project: Project, item: MediaItem, store: ProjectStore) -> Callable[[str], None]:
     def on_stage(stage: str) -> None:
         item.stage = stage
-        item.progress = None if stage == "downloading_model" else 0.0
+        item.progress = 0.0
         store.save(project)
 
     return on_stage

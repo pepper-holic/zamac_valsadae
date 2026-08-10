@@ -264,3 +264,44 @@ def test_transcribe_with_injected_model_ignores_on_stage():
     transcribe(Path("video.mp4"), model_size="small", model=fake_model, on_stage=stage_calls.append)
 
     assert stage_calls == []
+
+
+def test_download_model_with_progress_reports_byte_level_fraction(monkeypatch):
+    from app.services.whisper_service import _download_model_with_progress
+
+    def fake_snapshot_download(repo_id, **kwargs):
+        tqdm_cls = kwargs["tqdm_class"]
+        model_bar = tqdm_cls(total=90, unit="B")
+        config_bar = tqdm_cls(total=10, unit="B")
+        model_bar.update(45)
+        config_bar.update(10)
+        config_bar.close()
+        model_bar.update(45)
+        model_bar.close()
+        return "/fake/path"
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot_download)
+
+    calls = []
+    _download_model_with_progress("small", "/fake/output", calls.append)
+
+    assert calls[0] == pytest.approx(0.45, abs=0.01)
+    assert calls[-1] == pytest.approx(1.0, abs=0.01)
+
+
+def test_download_model_with_progress_ignores_non_byte_bars(monkeypatch):
+    from app.services.whisper_service import _download_model_with_progress
+
+    def fake_snapshot_download(repo_id, **kwargs):
+        tqdm_cls = kwargs["tqdm_class"]
+        files_bar = tqdm_cls(total=5, unit="files")
+        files_bar.update(5)
+        files_bar.close()
+        return "/fake/path"
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot_download)
+
+    calls = []
+    _download_model_with_progress("small", "/fake/output", calls.append)
+
+    assert calls == []

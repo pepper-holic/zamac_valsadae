@@ -31,6 +31,18 @@ _CPU_THREADS = os.cpu_count() or 4
 # "check one file" approach LocalTranslator.is_cached uses for CT2 models).
 _MODEL_WEIGHTS_FILENAME = "model.bin"
 
+# Files faster-whisper needs from the model repo (mirrors faster_whisper.utils
+# .download_model's allow_patterns, kept in sync manually since we call
+# huggingface_hub directly below instead of going through that helper - doing
+# so is what lets us plug in a progress-reporting tqdm_class).
+_MODEL_ALLOW_PATTERNS = [
+    "config.json",
+    "preprocessor_config.json",
+    "model.bin",
+    "tokenizer.json",
+    "vocabulary.*",
+]
+
 CancelCallback = Callable[[], bool]
 
 
@@ -92,22 +104,91 @@ def is_model_cached(model_size: str, download_root: Path | None = None) -> bool:
     return (_model_dir(model_size, root) / _MODEL_WEIGHTS_FILENAME).is_file()
 
 
+def _download_model_with_progress(
+    model_size: str, output_dir: str, on_progress: ProgressCallback | None
+) -> None:
+    """Downloads the CT2 whisper checkpoint, reporting real byte-level progress.
+
+    faster_whisper.utils.download_model() wraps huggingface_hub.snapshot_download
+    but hardcodes a no-op tqdm_class, so there is no way to observe progress
+    through it. This calls snapshot_download the same way but with our own
+    tqdm_class, which lets on_progress track actual bytes downloaded instead
+    of the indeterminate spinner the caller would otherwise be stuck with.
+    """
+    import io
+
+    import huggingface_hub
+    from faster_whisper.utils import _MODELS
+    from tqdm.auto import tqdm
+
+    repo_id = _MODELS.get(model_size, model_size)
+
+    totals: dict[int, int] = {}
+    currents: dict[int, int] = {}
+
+    def _report() -> None:
+        if on_progress is None or not totals:
+            return
+        total = sum(totals.values())
+        if total > 0:
+            on_progress(min(sum(currents.values()) / total, 1.0))
+
+    class _ProgressTqdm(tqdm):
+        """tqdm subclass that reports bytes instead of rendering a bar.
+
+        `disable=True` would also short-circuit tqdm's own counter updates
+        (not just its console output), so instead this writes to a throwaway
+        buffer - safe even under pythonw, where stdout/stderr don't exist -
+        and overrides display() to skip rendering entirely.
+        """
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            kwargs.setdefault("file", io.StringIO())
+            super().__init__(*args, **kwargs)
+            if self.unit == "B" and self.total:
+                totals[id(self)] = self.total
+                currents[id(self)] = 0
+
+        def display(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        def update(self, n: float = 1) -> bool | None:
+            result = super().update(n)
+            if id(self) in totals:
+                currents[id(self)] = self.n
+                _report()
+            return result
+
+        def close(self) -> None:
+            super().close()
+            totals.pop(id(self), None)
+            currents.pop(id(self), None)
+
+    huggingface_hub.snapshot_download(
+        repo_id,
+        local_dir=output_dir,
+        local_dir_use_symlinks=False,
+        allow_patterns=_MODEL_ALLOW_PATTERNS,
+        tqdm_class=_ProgressTqdm,
+    )
+
+
 def _get_model(
     model_size: str,
     on_stage: Callable[[str], None] | None = None,
+    on_progress: ProgressCallback | None = None,
     download_root: Path | None = None,
 ) -> WhisperModel:
     from faster_whisper import WhisperModel as FasterWhisperModel
-    from faster_whisper.utils import download_model
 
     if model_size not in _MODEL_CACHE:
         root = download_root if download_root is not None else _default_download_root()
         model_dir = _model_dir(model_size, root)
-        if on_stage is not None and not is_model_cached(model_size, download_root=root):
-            on_stage("downloading_model")
-        model_dir.mkdir(parents=True, exist_ok=True)
-        if not (model_dir / _MODEL_WEIGHTS_FILENAME).is_file():
-            download_model(model_size, output_dir=str(model_dir))
+        if not is_model_cached(model_size, download_root=root):
+            if on_stage is not None:
+                on_stage("downloading_model")
+            model_dir.mkdir(parents=True, exist_ok=True)
+            _download_model_with_progress(model_size, str(model_dir), on_progress)
         _MODEL_CACHE[model_size] = FasterWhisperModel(
             str(model_dir), device="cpu", compute_type=_COMPUTE_TYPE, cpu_threads=_CPU_THREADS
         )
@@ -125,7 +206,9 @@ def transcribe(
     download_root: Path | None = None,
     should_cancel: CancelCallback | None = None,
 ) -> list[Segment]:
-    active_model = model or _get_model(model_size, on_stage=on_stage, download_root=download_root)
+    active_model = model or _get_model(
+        model_size, on_stage=on_stage, on_progress=on_progress, download_root=download_root
+    )
 
     # word_timestamps=True runs faster-whisper's cross-attention/DTW word
     # alignment pass, which re-derives segment start/end times from the
