@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 type TooltipState = {
@@ -10,6 +10,7 @@ type TooltipState = {
 
 const GAP = 9
 const MIN_SPACE_ABOVE = 60
+const EDGE_MARGIN = 8
 
 /**
  * Renders data-tip bubbles into document.body with position: fixed, computed
@@ -25,6 +26,22 @@ const MIN_SPACE_ABOVE = 60
  */
 export function GlobalTooltip() {
   const [state, setState] = useState<TooltipState | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+
+  // Centering by trigger midpoint (below) can still push a wide bubble past
+  // the left/right edge when the trigger itself sits close to one (e.g. the
+  // left icon rail). Width isn't known until it's rendered, so nudge `left`
+  // afterward based on the real measured box - runs before paint, no flicker.
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    if (!state || !el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.left < EDGE_MARGIN) {
+      el.style.left = `${state.x + (EDGE_MARGIN - rect.left)}px`
+    } else if (rect.right > window.innerWidth - EDGE_MARGIN) {
+      el.style.left = `${state.x - (rect.right - (window.innerWidth - EDGE_MARGIN))}px`
+    }
+  }, [state])
 
   useEffect(() => {
     function targetOf(event: Event): HTMLElement | null {
@@ -41,7 +58,7 @@ export function GlobalTooltip() {
       const placement: 'top' | 'bottom' = rect.top > MIN_SPACE_ABOVE ? 'top' : 'bottom'
       setState({
         text,
-        x: Math.min(Math.max(rect.left + rect.width / 2, 90), window.innerWidth - 90),
+        x: rect.left + rect.width / 2,
         y: placement === 'top' ? rect.top - GAP : rect.bottom + GAP,
         placement,
       })
@@ -68,6 +85,7 @@ export function GlobalTooltip() {
 
   return createPortal(
     <div
+      ref={tipRef}
       className={`global-tooltip global-tooltip-${state.placement}`}
       style={{ left: state.x, top: state.y }}
       role="tooltip"
