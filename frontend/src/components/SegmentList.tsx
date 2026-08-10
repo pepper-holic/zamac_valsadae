@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReviewDiffEntry, Segment } from '../api/types'
 import { detectFillerSegments, updateSegment } from '../api/client'
+import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
 
 type Props = {
@@ -185,7 +186,10 @@ export function SegmentList({
   return (
     <section className="segment-list-panel">
       <div className="segment-list-header">
-        <h2>검수 대상 문장 ({segments.length})</h2>
+        <h2>
+          검수 대상 문장 ({segments.length})
+          <PanelHint tip="전사/번역된 문장을 한 줄씩 검수합니다. 문제가 있는 문장은 표시되어 확인하기 쉽습니다." />
+        </h2>
         {totalPages > 1 && (
           <div className="segment-list-pager">
             <button

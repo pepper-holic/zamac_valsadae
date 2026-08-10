@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { MediaItem, Project } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
 import { cancelItem, getModelStatus, transcribeItem } from '../api/client'
+import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
 import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
@@ -70,7 +71,10 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
 
   return (
     <section className="panel">
-      <h2>1. 전사 (Whisper)</h2>
+      <h2>
+        1. 전사 (Whisper)
+        <PanelHint tip="업로드한 영상/오디오에서 Whisper로 음성을 인식해 문장 단위 자막을 만듭니다. 모델이 클수록 정확하지만 느립니다." />
+      </h2>
       <div className="panel-row">
         <label htmlFor="model-select">모델 크기</label>
         <select

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { MediaItem, Project, ReviewDiffEntry, Segment } from '../api/types'
 import { deleteSegment, updateSegment } from '../api/client'
+import { PanelHint } from './PanelHint'
 import { formatTimestamp, parseTimestamp } from '../utils/time'
 
 type Props = {
@@ -56,7 +57,10 @@ export function SegmentDetailPanel({
   if (!segment) {
     return (
       <section className="detail-panel">
-        <h2>상세 검수</h2>
+        <h2>
+          상세 검수
+          <PanelHint tip="선택한 문장의 타이밍, 텍스트, 화자 등을 자세히 편집합니다." />
+        </h2>
         <p className="hint-text">가운데 목록에서 문장을 선택하면 상세 편집 도구가 표시됩니다.</p>
       </section>
     )
@@ -114,7 +118,10 @@ export function SegmentDetailPanel({
   return (
     <section className="detail-panel">
       <div className="detail-header">
-        <h2>상세 검수</h2>
+        <h2>
+          상세 검수
+          <PanelHint tip="선택한 문장의 타이밍, 텍스트, 화자 등을 자세히 편집합니다." />
+        </h2>
         <div className="detail-nav">
           <button
             type="button"

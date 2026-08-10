@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { MediaItem, Project, ReviewImportResult } from '../api/types'
 import { importReviewPackage, reviewPackageUrl } from '../api/client'
+import { PanelHint } from './PanelHint'
 
 type Props = {
   project: Project
@@ -65,7 +66,10 @@ export function ReviewPanel({ project, item, onImported }: Props) {
 
   return (
     <section className="panel">
-      <h2>AI 검수 (파일 왕복)</h2>
+      <h2>
+        AI 검수 (파일 왕복)
+        <PanelHint tip="검수 패키지를 내보내 외부 AI 도구로 검토받고, 그 결과 파일을 다시 불러와 자막에 반영합니다." />
+      </h2>
       <p className="hint-text">
         검수 패키지를 내려받아 Claude/ChatGPT 등에 직접 업로드해 검수를 받은 뒤, 결과 파일을 다시
         업로드하면 변경 사항이 문장 목록과 상세 검수 패널에 세그먼트별로 표시됩니다. (API 키 불필요)

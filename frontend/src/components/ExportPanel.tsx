@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ExportFormat, MediaItem, Project } from '../api/types'
 import { cancelItem, exportUrl, renderItem, renderedVideoUrl } from '../api/client'
+import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
 import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
@@ -48,7 +49,10 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
 
   return (
     <section className="panel">
-      <h2>4. 내보내기</h2>
+      <h2>
+        4. 내보내기
+        <PanelHint tip="완성된 자막을 SRT/VTT/JSON 파일로 내려받거나, 자막이 구워진 영상으로 렌더링합니다." />
+      </h2>
       <div className="panel-row">
         <label htmlFor="export-format">형식</label>
         <select

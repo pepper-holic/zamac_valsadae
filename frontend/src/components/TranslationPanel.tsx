@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { MediaItem, Project, TranslationDirection, TranslationEngine } from '../api/types'
 import { cancelItem, getModelStatus, translateItem, updateGlossary } from '../api/client'
+import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
 import { useElapsedSeconds } from '../utils/useElapsedSeconds'
 
@@ -85,7 +86,10 @@ export function TranslationPanel({ project, item, onStarted, onGlossaryUpdated }
 
   return (
     <section className="panel">
-      <h2>2. 번역</h2>
+      <h2>
+        2. 번역
+        <PanelHint tip="인식된 자막을 한↔영으로 번역합니다. 용어집을 등록하면 특정 단어/표현을 원하는 대로 고정할 수 있습니다." />
+      </h2>
       <div className="panel-row">
         <label htmlFor="direction-select">방향</label>
         <select

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Project, SubtitleStyle } from '../api/types'
 import { deleteStylePreset, saveStylePreset, updateSubtitleStyle } from '../api/client'
+import { PanelHint } from './PanelHint'
 
 type Props = {
   project: Project
@@ -92,7 +93,10 @@ export function SubtitleStylePanel({ project, onStyleUpdated }: Props) {
 
   return (
     <section className="panel subtitle-style-panel">
-      <h2>자막 스타일</h2>
+      <h2>
+        자막 스타일
+        <PanelHint tip="자막의 글꼴, 크기, 색상, 위치 등을 설정하고 미리보기로 바로 확인합니다." />
+      </h2>
 
       <div className="panel-row">
         <div className="panel-field">
