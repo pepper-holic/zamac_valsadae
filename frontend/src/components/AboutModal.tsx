@@ -19,7 +19,7 @@ export function AboutModal({ onClose }: Props) {
 
         <div className="help-body">
           <section className="help-section">
-            <h3>Zamak_Valsadae</h3>
+            <h3>자막발사대</h3>
             <p>
               영상/오디오에서 자막을 뽑고, 번역하고, 검수하고, 자막까지 구운 영상으로
               내보내는 로컬 도구입니다. 전사는 이 PC에서 직접 처리되며, 업로드한 파일과

@@ -97,7 +97,7 @@ def main() -> None:
         )
 
     webview.create_window(
-        "Zamak_Valsadae",
+        "자막발사대",
         APP_URL,
         width=1440,
         height=900,

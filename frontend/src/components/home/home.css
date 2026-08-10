@@ -1,10 +1,10 @@
 .home-view {
-  max-width: 760px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 48px 24px 0;
+  padding: 56px 40px 40px;
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 48px;
 }
 
 /* ---------- Hero ---------- */
@@ -16,7 +16,8 @@
   gap: 10px;
 }
 .home-hero-icon {
-  font-size: 42px;
+  width: 64px;
+  height: 64px;
   margin: 0 0 2px;
 }
 .home-hero-title {
@@ -27,7 +28,7 @@
   margin: 0;
 }
 .home-hero-subtitle {
-  max-width: 480px;
+  max-width: 620px;
   color: var(--text);
   line-height: 1.65;
   font-size: 14.5px;
@@ -90,15 +91,15 @@
 /* ---------- Feature cards ---------- */
 .home-features {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
 }
 .home-feature-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 18px 14px;
+  gap: 6px;
+  padding: 26px 18px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface);

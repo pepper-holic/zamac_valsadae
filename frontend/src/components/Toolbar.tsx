@@ -158,12 +158,12 @@ export function Toolbar({
       <div className="toolbar-zone toolbar-zone-brand">
         <button
           type="button"
-          className="toolbar-brand toolbar-brand-button"
+          className="toolbar-brand-button"
           onClick={onGoHome}
           data-tip="메인 페이지로 돌아갑니다."
+          aria-label="메인 페이지로 이동"
         >
-          <span className="toolbar-brand-mark" aria-hidden="true">Z</span>
-          Zamak_Valsadae
+          <img className="toolbar-brand-mark" src="/app-icon-glyph.png" alt="" aria-hidden="true" />
         </button>
         <div className="toolbar-divider" aria-hidden="true" />
         <div className="toolbar-workspace-switcher">

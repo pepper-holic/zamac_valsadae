@@ -49,8 +49,8 @@ export function HomeView({
   return (
     <div className="home-view">
       <section className="home-hero">
-        <p className="home-hero-icon" aria-hidden="true">🎬</p>
-        <h1 className="home-hero-title">Zamak_Valsadae</h1>
+        <img className="home-hero-icon" src="/app-icon.png" alt="" aria-hidden="true" />
+        <h1 className="home-hero-title">자막발사대</h1>
         <p className="home-hero-subtitle">
           영상/오디오에서 자막을 뽑고, 번역하고, 검수하고, 자막까지 구운 영상으로 내보내는
           로컬 도구입니다.
