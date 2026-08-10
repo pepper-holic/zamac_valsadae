@@ -20,8 +20,30 @@ HOST = "127.0.0.1"
 PORT = 8000
 READY_URL = f"http://{HOST}:{PORT}/projects"
 APP_URL = f"http://{HOST}:{PORT}"
-STARTUP_TIMEOUT_SEC = 60
+# The very first cold start imports torch/transformers/pyannote-audio before
+# uvicorn can bind the port - well over a minute in testing before the OS
+# has any of that on disk cache. Must stay >= the native launcher's own
+# STARTUP_TIMEOUT_SEC (installer/launcher.py), which independently waits on
+# this same readiness check from outside this process.
+STARTUP_TIMEOUT_SEC = 240
 LOG_PATH = Path(__file__).resolve().parent.parent / "desktop_error.log"
+
+# webview.start(icon=...)'s docstring claims GTK/QT only, but on Windows
+# "edgechromium"/"mshtml" both resolve to the winforms platform module, which
+# does honor it (webview/platforms/winforms.py sets self.Icon from it) -
+# without it, the window/taskbar icon falls back to extracting one from
+# sys.executable, i.e. the portable runtime's generic pythonw.exe icon.
+# icon.ico lives at the app root when installed (installer.iss copies it
+# there) but under installer/ in this dev checkout - try both.
+_APP_ROOT = Path(__file__).resolve().parent.parent.parent
+_ICON_CANDIDATES = [_APP_ROOT / "icon.ico", _APP_ROOT / "installer" / "icon.ico"]
+
+
+def _find_icon() -> str | None:
+    for candidate in _ICON_CANDIDATES:
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def _ensure_pywebview_installed() -> None:
@@ -81,7 +103,7 @@ def main() -> None:
         height=900,
         min_size=(1024, 640),
     )
-    webview.start(gui="edgechromium")
+    webview.start(gui="edgechromium", icon=_find_icon())
 
 
 if __name__ == "__main__":

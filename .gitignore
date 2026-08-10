@@ -2,6 +2,8 @@ data/
 runtime/
 installer/launcher_dist/
 installer/launcher_build/
+installer/debug_dist/
+installer/debug_build/
 backend/.venv/
 frontend/node_modules/
 frontend/dist/

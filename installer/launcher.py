@@ -18,6 +18,7 @@ so the build stays small and fast regardless of app size.
 """
 
 import ctypes
+import os
 import re
 import subprocess
 import sys
@@ -35,13 +36,40 @@ CREATE_NO_WINDOW = 0x08000000
 HOST = "127.0.0.1"
 PORT = 8000
 READY_URL = f"http://{HOST}:{PORT}/projects"
-STARTUP_TIMEOUT_SEC = 120
+# The backend's first cold start imports torch/transformers/pyannote-audio -
+# genuinely slow (well over a minute in testing) the very first time, before
+# any disk/OS caching has warmed up. Must stay >= desktop.py's own
+# STARTUP_TIMEOUT_SEC, which independently guards the same startup.
+STARTUP_TIMEOUT_SEC = 240
 
 _STEP_LINE_RE = re.compile(r"\[(\d+)/(\d+)\]")
+# pip prints one of these per package it fetches/builds - used to give step 4
+# (the multi-GB backend package install) visible movement instead of sitting
+# at a static percentage for several minutes straight.
+_PIP_PACKAGE_RE = re.compile(r"^(?:Downloading|Using cached) ")
+_PIP_PACKAGE_STEP = 4
+
+# install.ps1's own step messages are English (they go to install.log for
+# troubleshooting) - the splash shows a Korean label per step instead of
+# passing that text through, keyed by step number.
+_STEP_LABELS_KO = {
+    1: "Python 런타임 준비 중",
+    2: "Node.js 런타임 준비 중",
+    3: "ffmpeg 준비 중",
+    4: "필수 패키지 설치 중 (용량이 커서 시간이 걸릴 수 있어요)",
+    5: "프론트엔드 빌드 중",
+}
 
 
 def _show_error(message: str) -> None:
     ctypes.windll.user32.MessageBoxW(None, message, "Zamak_Valsadae", 0x10)
+
+
+def _log(message: str) -> None:
+    """No-op under the real --noconsole build (sys.stdout is None there);
+    only prints when run via the console debug build for troubleshooting."""
+    if sys.stdout is not None:
+        print(message, flush=True)
 
 
 def _ensure_runtime(root_dir: Path, splash: Splash) -> None:
@@ -50,39 +78,64 @@ def _ensure_runtime(root_dir: Path, splash: Splash) -> None:
     # never set up, and install.ps1 itself now repairs that on retry - but
     # only if it actually gets invoked again instead of being skipped here.
     install_complete = root_dir / "runtime" / ".install_complete"
+    _log(f"[launcher] root_dir={root_dir}")
+    _log(f"[launcher] install marker present: {install_complete.exists()}")
     if install_complete.exists():
         return
 
     log_path = root_dir / "install.log"
     install_ps1 = root_dir / "install.ps1"
+    _log(f"[launcher] install.ps1 exists: {install_ps1.exists()}")
     splash.update("최초 실행: 필수 구성 요소를 설치하는 중...", percent=0)
 
-    process = subprocess.Popen(
-        [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(install_ps1),
-        ],
-        cwd=str(root_dir),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        creationflags=CREATE_NO_WINDOW,
-        text=True,
-        bufsize=1,
-    )
+    try:
+        process = subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(install_ps1),
+            ],
+            cwd=str(root_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=CREATE_NO_WINDOW,
+            text=True,
+            # npm/vite print UTF-8 (e.g. the "✓" build checkmark); text=True
+            # alone decodes with the system locale encoding (cp949 on Korean
+            # Windows), which raises UnicodeDecodeError on that output.
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+    except OSError as exc:
+        _log(f"[launcher] failed to start powershell: {exc!r}")
+        raise
+    _log(f"[launcher] install.ps1 subprocess started, pid={process.pid}")
+
+    current_step = 0
+    package_count = 0
     with log_path.open("w", encoding="utf-8") as log_file:
         for line in process.stdout:
             log_file.write(line)
             log_file.flush()
             match = _STEP_LINE_RE.search(line)
             if match:
-                step, total = int(match.group(1)), int(match.group(2))
-                label = line.strip().lstrip("=> ").strip()
-                splash.update(label, percent=(step - 1) / total * 100)
+                current_step, total = int(match.group(1)), int(match.group(2))
+                package_count = 0
+                label = _STEP_LABELS_KO.get(
+                    current_step, f"설치 진행 중 ({current_step}/{total})"
+                )
+                _log(f"[launcher] step {current_step}/{total}: {label} | raw: {line.strip()}")
+                splash.update(label, percent=(current_step - 1) / total * 100)
+            elif current_step == _PIP_PACKAGE_STEP and _PIP_PACKAGE_RE.match(line):
+                package_count += 1
+                label = _STEP_LABELS_KO[_PIP_PACKAGE_STEP]
+                splash.update(f"{label} · 패키지 {package_count}개 처리됨", percent=None)
     returncode = process.wait()
+    _log(f"[launcher] install.ps1 exited with code {returncode}")
 
     if returncode != 0:
         _show_error(
@@ -100,29 +153,41 @@ def _launch_backend(root_dir: Path) -> None:
     )
 
     pythonw_exe = root_dir / "runtime" / "python" / "pythonw.exe"
-    env_bat = root_dir / "env.bat"
     backend_dir = root_dir / "backend"
+    runtime_dir = root_dir / "runtime"
+
+    # Spawns pythonw directly instead of going through `cmd /c "call env.bat
+    # && ... && start ... /B ..."`: that batch chain proved unreliable when
+    # launched via subprocess with CREATE_NO_WINDOW (silently produced no
+    # running process at all in testing). env.bat only ever did two things -
+    # prepend the portable runtime to PATH, and set HF_HUB_DISABLE_XET - both
+    # reproduced directly here via `env`, which Popen passes straight to the
+    # child process with no shell in between to swallow errors.
+    child_env = dict(os.environ)
+    child_env["PATH"] = (
+        f"{runtime_dir / 'python'};{runtime_dir / 'python' / 'Scripts'};"
+        f"{runtime_dir / 'node'};{runtime_dir / 'ffmpeg' / 'bin'};{child_env.get('PATH', '')}"
+    )
+    child_env["HF_HUB_DISABLE_XET"] = "1"
 
     subprocess.Popen(
-        [
-            "cmd",
-            "/c",
-            f'call "{env_bat}" && cd /d "{backend_dir}" && start "" /B "{pythonw_exe}" -m app.desktop',
-        ],
-        cwd=str(root_dir),
+        [str(pythonw_exe), "-m", "app.desktop"],
+        cwd=str(backend_dir),
+        env=child_env,
         creationflags=CREATE_NO_WINDOW,
     )
 
 
-def _wait_until_backend_ready(splash: Splash) -> None:
+def _wait_until_backend_ready(splash: Splash) -> bool:
     splash.update("앱을 불러오는 중...")
     deadline = time.monotonic() + STARTUP_TIMEOUT_SEC
     while time.monotonic() < deadline:
         try:
             urllib.request.urlopen(READY_URL, timeout=1)
-            return
+            return True
         except OSError:
             time.sleep(0.4)
+    return False
 
 
 def main() -> int:
@@ -141,8 +206,14 @@ def main() -> int:
         try:
             _ensure_runtime(root_dir, splash)
             _launch_backend(root_dir)
-            _wait_until_backend_ready(splash)
+            _log("[launcher] backend process launched, waiting for it to respond...")
+            ready = _wait_until_backend_ready(splash)
+            _log(f"[launcher] backend ready: {ready}")
         except Exception as exc:  # surfaced to caller via `failure`, not raised on this thread
+            import traceback
+
+            _log(f"[launcher] worker failed: {exc!r}")
+            _log(traceback.format_exc())
             failure["message"] = str(exc)
         finally:
             done.set()
@@ -156,4 +227,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+        # Runs under pythonw-style --noconsole (no stdout/stderr), so an
+        # uncaught exception here would otherwise vanish silently - a crash
+        # before the splash's own worker-thread try/except even starts
+        # (e.g. constructing the Tk window itself) needs its own net.
+        import traceback
+
+        crash_log = Path(sys.executable).resolve().parent / "launcher_crash.log"
+        crash_log.write_text(traceback.format_exc(), encoding="utf-8")
+        _show_error(
+            "실행 준비 중 오류가 발생했습니다.\n\n"
+            f"자세한 내용: {crash_log}"
+        )
+        sys.exit(1)
