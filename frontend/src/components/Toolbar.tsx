@@ -3,6 +3,7 @@ import type { MediaItem, Project } from '../api/types'
 import { deleteProject } from '../api/client'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
+import { LegalPagesModal } from './legal/LegalPagesModal'
 
 const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 
@@ -57,6 +58,7 @@ export function Toolbar({
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [isLegalOpen, setIsLegalOpen] = useState(false)
   const [isDeletingProject, setIsDeletingProject] = useState(false)
   const [isDeletingItem, setIsDeletingItem] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -293,6 +295,16 @@ export function Toolbar({
       <button
         type="button"
         className="toolbar-icon-button"
+        onClick={() => setIsLegalOpen(true)}
+        data-tip="이용약관, 개인정보처리방침, 회사 소개 등 서비스 준비 문서를 봅니다 (초안, 더미 데이터 포함)."
+        aria-label="약관 및 회사 정보"
+      >
+        §
+      </button>
+
+      <button
+        type="button"
+        className="toolbar-icon-button"
         onClick={() => setIsHelpOpen(true)}
         data-tip="사용법 가이드를 엽니다."
         aria-label="도움말"
@@ -317,6 +329,7 @@ export function Toolbar({
       )}
 
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
+      {isLegalOpen && <LegalPagesModal onClose={() => setIsLegalOpen(false)} />}
     </header>
   )
 }
