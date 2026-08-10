@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import type { Segment, SubtitleStyle } from '../api/types'
-import { formatClock, formatTimestamp } from '../utils/time'
+import { formatTimestamp } from '../utils/time'
 import { wrapSubtitleText } from '../utils/subtitleWrap'
 import {
   karaokeHighlightLength,
@@ -8,6 +7,10 @@ import {
   subtitleFadeOpacity,
   subtitleStyleToCss,
 } from '../utils/subtitleStyle'
+import { ASPECT_OPTIONS, useVideoAspectRatio } from '../hooks/useVideoAspectRatio'
+import { useTimelineZoom } from '../hooks/useTimelineZoom'
+import { Timeline } from './Timeline'
+import { TransportControls } from './TransportControls'
 
 type Props = {
   videoRef: React.RefObject<HTMLVideoElement | null>
@@ -28,53 +31,6 @@ type Props = {
   onLoopToggle: () => void
   onSelectSegment: (segmentId: string) => void
   onResizeSegment: (segmentId: string, edge: 'start' | 'end', time: number) => Promise<void>
-}
-
-type DragEdge = 'start' | 'end'
-
-type DragState = {
-  segmentId: string
-  edge: DragEdge
-  previewTime: number
-  windowStart: number
-  windowEnd: number
-}
-
-const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
-const STEP_SECONDS = 1
-const MIN_SEGMENT_DURATION = 0.2
-const ZOOM_LEVELS = [1, 1.5, 2, 3, 4, 6, 8]
-const MIN_ZOOM_INDEX = 0
-const MAX_ZOOM_INDEX = ZOOM_LEVELS.length - 1
-const TICK_COUNT = 6
-const DETAIL_PADDING_RATIO = 0.5
-const MIN_DETAIL_PADDING = 1
-
-type AspectOption = { id: string; label: string; ratio: number | null }
-
-// ratio = width / height; null means "원본" (read from the loaded video's own dimensions).
-const ASPECT_OPTIONS: AspectOption[] = [
-  { id: 'auto', label: '원본 비율', ratio: null },
-  { id: '16:9', label: '16:9 · 유튜브', ratio: 16 / 9 },
-  { id: '9:16', label: '9:16 · 쇼츠/릴스', ratio: 9 / 16 },
-  { id: '1:1', label: '1:1 · 정사각형', ratio: 1 },
-  { id: '4:5', label: '4:5 · 인스타 피드', ratio: 4 / 5 },
-]
-const DEFAULT_ASPECT_ID = '16:9'
-const ASPECT_STORAGE_KEY = 'zv_previewAspectRatio'
-
-function buildTicks(duration: number): number[] {
-  if (duration <= 0) return []
-  return Array.from({ length: TICK_COUNT }, (_, i) => (duration * i) / (TICK_COUNT - 1))
-}
-
-function getDetailWindow(segment: Segment, duration: number): { windowStart: number; windowEnd: number } {
-  const length = segment.end - segment.start
-  const padding = Math.max(length * DETAIL_PADDING_RATIO, MIN_DETAIL_PADDING)
-  return {
-    windowStart: Math.max(0, segment.start - padding),
-    windowEnd: Math.min(duration, segment.end + padding),
-  }
 }
 
 function renderSubtitleText(
@@ -117,72 +73,8 @@ export function VideoStage({
   onSelectSegment,
   onResizeSegment,
 }: Props) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const detailTrackRef = useRef<HTMLDivElement>(null)
-  const [dragState, setDragState] = useState<DragState | null>(null)
-  const [zoomIndex, setZoomIndex] = useState(MIN_ZOOM_INDEX)
-  const zoom = ZOOM_LEVELS[zoomIndex]
-  const [aspectRatioId, setAspectRatioId] = useState<string>(
-    () => window.localStorage.getItem(ASPECT_STORAGE_KEY) ?? DEFAULT_ASPECT_ID,
-  )
-  const [naturalRatio, setNaturalRatio] = useState<number | null>(null)
-
-  useEffect(() => {
-    window.localStorage.setItem(ASPECT_STORAGE_KEY, aspectRatioId)
-  }, [aspectRatioId])
-
-  useEffect(() => {
-    setNaturalRatio(null)
-  }, [src])
-
-  useEffect(() => {
-    if (!dragState) return
-
-    function handlePointerMove(event: PointerEvent) {
-      const track = detailTrackRef.current
-      if (!track || !dragState) return
-      const windowDuration = dragState.windowEnd - dragState.windowStart
-      if (windowDuration <= 0) return
-      const rect = track.getBoundingClientRect()
-      const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-      const time = dragState.windowStart + ratio * windowDuration
-      setDragState((prev) => (prev ? { ...prev, previewTime: time } : prev))
-    }
-
-    function handlePointerUp() {
-      setDragState((prev) => {
-        if (prev) {
-          onResizeSegment(prev.segmentId, prev.edge, prev.previewTime)
-        }
-        return null
-      })
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
-    // dragState.windowStart/windowEnd/edge don't change mid-drag, only previewTime does (updated via
-    // setDragState functional updater above) - re-subscribing per-move would be wasteful.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragState?.segmentId, dragState?.edge, dragState?.windowStart, dragState?.windowEnd, onResizeSegment])
-
-  function startDrag(segment: Segment, edge: DragEdge) {
-    return (event: React.PointerEvent) => {
-      event.stopPropagation()
-      event.preventDefault()
-      const { windowStart, windowEnd } = getDetailWindow(segment, duration)
-      setDragState({
-        segmentId: segment.id,
-        edge,
-        previewTime: edge === 'start' ? segment.start : segment.end,
-        windowStart,
-        windowEnd,
-      })
-    }
-  }
+  const { aspectRatioId, setAspectRatioId, videoFrameStyle, handleLoadedMetadata } = useVideoAspectRatio(src)
+  const { zoom, zoomIn, zoomOut, atMin, atMax } = useTimelineZoom()
 
   function togglePlay() {
     const video = videoRef.current
@@ -200,58 +92,17 @@ export function VideoStage({
     video.currentTime = Math.min(Math.max(video.currentTime + deltaSeconds, 0), duration)
   }
 
-  function handleTrackClick(event: React.MouseEvent<HTMLDivElement>) {
-    const track = trackRef.current
-    if (!track || duration === 0) return
-    const rect = track.getBoundingClientRect()
-    const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-    onSeek(ratio * duration)
-  }
-
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
-  const ticks = buildTicks(duration)
   const activeSegment = segments.find(
     (segment) => currentTime >= segment.start && currentTime < segment.end,
   )
-  const selectedSegment = segments.find((segment) => segment.id === selectedSegmentId) ?? null
-  const detailWindow = selectedSegment ? getDetailWindow(selectedSegment, duration) : null
-  const detailWindowDuration = detailWindow ? detailWindow.windowEnd - detailWindow.windowStart : 0
-  const isDraggingSelected = selectedSegment ? dragState?.segmentId === selectedSegment.id : false
-  const detailStart =
-    selectedSegment && isDraggingSelected && dragState?.edge === 'start'
-      ? Math.min(dragState.previewTime, selectedSegment.end - MIN_SEGMENT_DURATION)
-      : selectedSegment?.start ?? 0
-  const detailEnd =
-    selectedSegment && isDraggingSelected && dragState?.edge === 'end'
-      ? Math.max(dragState.previewTime, selectedSegment.start + MIN_SEGMENT_DURATION)
-      : selectedSegment?.end ?? 0
-
-  function handleDetailTrackClick(event: React.MouseEvent<HTMLDivElement>) {
-    const track = detailTrackRef.current
-    if (!track || !detailWindow || detailWindowDuration <= 0) return
-    const rect = track.getBoundingClientRect()
-    const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-    onSeek(detailWindow.windowStart + ratio * detailWindowDuration)
-  }
-
-  function handleLoadedMetadata(event: React.SyntheticEvent<HTMLVideoElement>) {
-    const video = event.currentTarget
-    if (video.videoWidth > 0 && video.videoHeight > 0) {
-      setNaturalRatio(video.videoWidth / video.videoHeight)
-    }
-  }
-
-  const selectedAspect = ASPECT_OPTIONS.find((option) => option.id === aspectRatioId) ?? ASPECT_OPTIONS[1]
-  const effectiveRatio = selectedAspect.ratio ?? naturalRatio ?? 16 / 9
-  const isPortraitFrame = effectiveRatio < 1
-  const videoFrameStyle: React.CSSProperties = isPortraitFrame
-    ? { aspectRatio: String(effectiveRatio), height: 'min(60vh, 100%)', width: 'auto', maxWidth: '100%' }
-    : { aspectRatio: String(effectiveRatio), width: '100%', maxHeight: 'min(60vh, 100%)' }
 
   return (
     <section className="video-stage">
       <div className="video-frame-controls">
-        <label className="aspect-ratio-select" data-tip="플랫폼에 맞춰 미리보기 화면비를 바꿉니다. 원본과 비율이 다르면 남는 영역은 검정으로 채워집니다.">
+        <label
+          className="aspect-ratio-select"
+          data-tip="플랫폼에 맞춰 미리보기 화면비를 바꿉니다. 원본과 비율이 다르면 남는 영역은 검정으로 채워집니다."
+        >
           화면비율
           <select value={aspectRatioId} onChange={(event) => setAspectRatioId(event.target.value)}>
             {ASPECT_OPTIONS.map((option) => (
@@ -304,158 +155,38 @@ export function VideoStage({
         <span className="timecode-sep">/</span>
         <span className="timecode-total">{formatTimestamp(duration || 0)}</span>
         <div className="timeline-zoom-controls" data-tip="타임라인을 확대/축소합니다.">
-          <button
-            type="button"
-            onClick={() => setZoomIndex((prev) => Math.max(prev - 1, MIN_ZOOM_INDEX))}
-            disabled={zoomIndex === MIN_ZOOM_INDEX}
-            aria-label="타임라인 축소"
-          >
+          <button type="button" onClick={zoomOut} disabled={atMin} aria-label="타임라인 축소">
             −
           </button>
           <span className="timeline-zoom-level">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            onClick={() => setZoomIndex((prev) => Math.min(prev + 1, MAX_ZOOM_INDEX))}
-            disabled={zoomIndex === MAX_ZOOM_INDEX}
-            aria-label="타임라인 확대"
-          >
+          <button type="button" onClick={zoomIn} disabled={atMax} aria-label="타임라인 확대">
             +
           </button>
         </div>
       </div>
 
-      <div className="timeline-scroll" style={{ overflowX: zoom > 1 ? 'auto' : 'hidden' }}>
-        <div
-          className="timeline-track"
-          ref={trackRef}
-          onClick={handleTrackClick}
-          style={{ width: `${zoom * 100}%` }}
-          data-tip="클릭한 지점으로 이동합니다. 색칠된 구간은 인식된 문장이며, 클릭하면 선택됩니다."
-        >
-          {segments.map((segment) => (
-            <div
-              key={segment.id}
-              role="button"
-              tabIndex={0}
-              className={segment.id === selectedSegmentId ? 'timeline-marker active' : 'timeline-marker'}
-              style={{
-                left: duration > 0 ? `${(segment.start / duration) * 100}%` : '0%',
-                width:
-                  duration > 0 ? `${Math.max(((segment.end - segment.start) / duration) * 100, 0.3)}%` : '0%',
-              }}
-              title={segment.text}
-              onClick={(event) => {
-                event.stopPropagation()
-                onSelectSegment(segment.id)
-                onSeek(segment.start)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelectSegment(segment.id)
-                  onSeek(segment.start)
-                }
-              }}
-            />
-          ))}
-          <div className="timeline-playhead" style={{ left: `${progressPercent}%` }} />
-        </div>
-        {ticks.length > 0 && (
-          <div className="timeline-ticks" style={{ width: `${zoom * 100}%` }}>
-            {ticks.map((time, index) => (
-              <span
-                key={index}
-                className="timeline-tick"
-                style={{ left: `${(time / duration) * 100}%` }}
-              >
-                {formatClock(time)}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <Timeline
+        duration={duration}
+        currentTime={currentTime}
+        segments={segments}
+        selectedSegmentId={selectedSegmentId}
+        zoom={zoom}
+        onSeek={onSeek}
+        onSelectSegment={onSelectSegment}
+        onResizeSegment={onResizeSegment}
+      />
 
-      {selectedSegment && detailWindow && (
-        <div className="timeline-detail">
-          <div className="timeline-detail-label">
-            선택한 문장 구간 조정 <span className="timeline-detail-range">{formatClock(detailStart)} – {formatClock(detailEnd)}</span>
-          </div>
-          <div
-            className="timeline-detail-track"
-            ref={detailTrackRef}
-            onClick={handleDetailTrackClick}
-            data-tip="클릭한 지점으로 이동합니다. 양 끝을 드래그해 구간 시간을 조절합니다."
-          >
-            <div
-              className="timeline-marker active"
-              style={{
-                left: detailWindowDuration > 0 ? `${((detailStart - detailWindow.windowStart) / detailWindowDuration) * 100}%` : '0%',
-                width: detailWindowDuration > 0 ? `${((detailEnd - detailStart) / detailWindowDuration) * 100}%` : '0%',
-              }}
-            >
-              <span
-                className="timeline-marker-handle left"
-                onPointerDown={startDrag(selectedSegment, 'start')}
-                data-tip="드래그해서 시작 시간을 조절합니다."
-              />
-              <span
-                className="timeline-marker-handle right"
-                onPointerDown={startDrag(selectedSegment, 'end')}
-                data-tip="드래그해서 종료 시간을 조절합니다."
-              />
-            </div>
-            {currentTime >= detailWindow.windowStart && currentTime <= detailWindow.windowEnd && (
-              <div
-                className="timeline-playhead"
-                style={{ left: `${((currentTime - detailWindow.windowStart) / detailWindowDuration) * 100}%` }}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      <TransportControls
+        isPlaying={isPlaying}
+        playbackRate={playbackRate}
+        loopSegment={loopSegment}
+        onTogglePlay={togglePlay}
+        onStep={step}
+        onRateChange={(rate) => onRateChange(rate)}
+        onLoopToggle={onLoopToggle}
+      />
 
-      <div className="transport-controls">
-        <button type="button" onClick={() => step(-STEP_SECONDS)} data-tip="1초 뒤로 이동 (단축키: ←)">
-          ◀◀ 1s
-        </button>
-        <button
-          type="button"
-          className="play-button"
-          onClick={togglePlay}
-          data-tip="재생/일시정지 (단축키: Space)"
-        >
-          {isPlaying ? '일시정지' : '재생'}
-        </button>
-        <button type="button" onClick={() => step(STEP_SECONDS)} data-tip="1초 앞으로 이동 (단축키: →)">
-          1s ▶▶
-        </button>
-
-        <label className="rate-select" data-tip="재생 속도를 조절합니다.">
-          속도
-          <select
-            value={playbackRate}
-            onChange={(event) => onRateChange(Number(event.target.value))}
-          >
-            {PLAYBACK_RATES.map((rate) => (
-              <option key={rate} value={rate}>
-                {rate}x
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label
-          className="checkbox-label"
-          data-tip="켜두면 선택한 문장의 시작~종료 구간을 자동으로 반복 재생합니다."
-        >
-          <input type="checkbox" checked={loopSegment} onChange={onLoopToggle} />
-          현재 구간 반복
-        </label>
-      </div>
-
-      <p className="keyboard-hint">
-        단축키: Space 재생/일시정지 · ←/→ 1초 이동 · ↑/↓ 이전/다음 문장
-      </p>
+      <p className="keyboard-hint">단축키: Space 재생/일시정지 · ←/→ 1초 이동 · ↑/↓ 이전/다음 문장</p>
     </section>
   )
 }

@@ -8,46 +8,6 @@ export type LegalPageDef = {
   content: React.ReactNode
 }
 
-export const OVERVIEW_PAGE: LegalPageDef = {
-  id: 'overview',
-  group: '개요',
-  title: '이 문서에 대하여',
-  subtitle:
-    'Zamak_Valsadae가 로컬 전용 도구에서 서버 호스팅(SaaS) 서비스로 확장할 때 필요한 법적·회사·콘텐츠 페이지 초안 모음입니다.',
-  content: (
-    <>
-      <DummyBanner>
-        <strong>사업자 등록·요금제 설계가 끝나기 전까지는 초안입니다.</strong>{' '}
-        <Dummy>더미</Dummy> 표시가 붙은 값은 실제 정보가 아닙니다 — 사업자 등록 및 서비스
-        정책이 확정되면 해당 값부터 실제 값으로 교체해야 합니다.
-      </DummyBanner>
-      <h2>왜 지금은 로컬 전용인가</h2>
-      <p>
-        현재 Zamak_Valsadae는 사용자의 컴퓨터에서만 실행되는 설치형 도구입니다. 업로드한
-        영상/오디오와 전사·번역 결과는 전부 로컬 <code>data/</code> 폴더에 저장되며 서버로
-        전송되지 않습니다. 아래 페이지들은 나중에 서버 호스팅으로 전환할 때를 대비해 미리
-        뼈대만 잡아둔 것입니다.
-      </p>
-      <h2>페이지 구성</h2>
-      <ul>
-        <li>
-          <b>법적 문서</b> — 이용약관, 개인정보처리방침, 환불 안내. 전자상거래법·개인정보보호법상
-          서버 서비스 운영 시 필수이며, 시행 전 반드시 법률 검토가 필요합니다.
-        </li>
-        <li>
-          <b>회사 · 서비스</b> — 회사 소개(사업자 정보 푸터), 가격 정책, 다운로드 페이지.
-        </li>
-        <li>
-          <b>계정 · 커뮤니티</b> — 로그인/체험하기(아직 요구사항 메모 단계), 커뮤니티, 공지사항.
-        </li>
-        <li>
-          <b>콘텐츠</b> — 인사이트(블로그형 콘텐츠) 등 우선순위가 낮은 항목.
-        </li>
-      </ul>
-    </>
-  ),
-}
-
 export const TERMS_PAGE: LegalPageDef = {
   id: 'terms',
   group: '법적 문서',

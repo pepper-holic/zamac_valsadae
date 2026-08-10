@@ -2,6 +2,9 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
 pydantic>=2.9
+
+# 데스크톱 창(WebView2 기반) - Chrome 브라우저 탭 대신 네이티브 프로그램 창으로 UI를 띄웁니다.
+pywebview>=5.3
 faster-whisper>=1.0.3
 transformers>=4.45
 sentencepiece>=0.2

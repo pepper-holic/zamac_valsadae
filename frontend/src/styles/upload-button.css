@@ -1,0 +1,24 @@
+/* ---------- Upload button (shared) ---------- */
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+.upload-button:hover {
+  opacity: 0.9;
+}
+.upload-button.drag-over {
+  outline: 2px dashed #fff;
+  outline-offset: 2px;
+  opacity: 0.85;
+}
+

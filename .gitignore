@@ -3,6 +3,8 @@ runtime/
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
+website/node_modules/
+website/dist/
 __pycache__/
 *.pyc
 .pytest_cache/

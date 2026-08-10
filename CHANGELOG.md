@@ -33,6 +33,18 @@
 
 - 프로젝트 자체 라이선스를 비공개(All rights reserved)로 결정, 루트 `LICENSE` 추가.
 - 상단 도구 모음을 세그먼트 컨트롤 + 드롭다운 방식에서 좌측 아이콘 레일 + 슬라이드 패널 방식으로 재구성.
+- `run.bat` 실행 시 Chrome 등 브라우저 탭 대신 `pywebview`(WebView2) 기반 네이티브 프로그램
+  창으로 뜨도록 변경(`backend/app/desktop.py`) — 백엔드는 여전히 로컬에서 실행, 사용자에게는
+  일반 설치형 프로그램처럼 보이도록 함.
+- 서비스 웹페이지(소개/다운로드/가격 정책/이용약관 등)를 앱에서 완전히 분리해 별도
+  `website/` 프로젝트로 이동 — 앱 안에는 웹사이트로 가는 링크(아이콘)와 "프로그램 정보"
+  모달만 남기고, 순수 기능(전사/번역/스타일/검수/내보내기)에 집중하도록 정리.
+- 프론트엔드 전체 리팩토링 — `App.css`(2013줄)를 13개 기능별 파일로 분리
+  (`src/styles/`), `App.tsx`(730줄)를 커스텀 훅(`useProjectWorkspace`,
+  `useSegmentEditing`, `useReviewDiffs`, `useKeyboardShortcuts`, `usePanelWidths`)으로
+  분리해 314줄로 축소, `VideoStage.tsx`(461줄)를 `Timeline`/`TransportControls`
+  컴포넌트와 `useTimelineZoom`/`useVideoAspectRatio` 훅으로 분리. 이제 프론트엔드
+  소스 파일 전부 400줄 이하.
 
 ### Fixed
 

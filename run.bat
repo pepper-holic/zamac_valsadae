@@ -1,5 +1,4 @@
 @echo off
-echo Starting Zamak_Valsadae server...
 set "ROOT_DIR=%~dp0"
 
 if not exist "%ROOT_DIR%runtime\python\python.exe" (
@@ -15,19 +14,20 @@ if not exist "%ROOT_DIR%runtime\python\python.exe" (
     )
 )
 
+rem The bundled portable Python ships a python312._pth file, which puts the
+rem interpreter in "isolated path" mode - it ignores PYTHONPATH and does NOT
+rem add the current directory to sys.path (even for `python -m`), unlike a
+rem normal Python install. Without this .pth file in site-packages, `app.*`
+rem imports (and `python -m app.desktop` itself) fail with
+rem "ModuleNotFoundError: No module named 'app'". Regenerated every run so it
+rem stays correct even if this folder is moved.
+echo %ROOT_DIR%backend> "%ROOT_DIR%runtime\python\Lib\site-packages\zamac_valsadae.pth"
+
 (
     echo @echo off
     echo call "%ROOT_DIR%env.bat"
     echo cd /d "%ROOT_DIR%backend"
-    echo python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-) > "%ROOT_DIR%runtime\_run_server.bat"
+    echo start "" /B pythonw -m app.desktop
+) > "%ROOT_DIR%runtime\_run_app.bat"
 
-start "Zamak_Valsadae Server" cmd /k "%ROOT_DIR%runtime\_run_server.bat"
-
-echo Waiting for the server to start...
-timeout /t 4 /nobreak >nul
-start "" http://localhost:8000
-
-echo.
-echo The server is running in a separate window. Close that window to stop it.
-pause
+call "%ROOT_DIR%runtime\_run_app.bat"

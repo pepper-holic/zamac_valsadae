@@ -1,0 +1,216 @@
+/* ---------- Reviewed toggle button + quality callout (detail panel) ---------- */
+.reviewed-button {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reviewed-button.checked {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.quality-callout {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--warning-soft, rgba(217, 164, 6, 0.12));
+  border: 1px solid transparent;
+}
+.quality-callout-icon {
+  color: var(--warning);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.quality-callout p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.quality-callout p + p {
+  margin-top: 4px;
+}
+
+/* ---------- Detail panel (right) ---------- */
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 0 320px;
+  min-width: 220px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.detail-header h2 {
+  margin: 0;
+}
+
+.detail-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+.detail-nav button {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  white-space: nowrap;
+  color: var(--text-h);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.segment-position {
+  font-family: var(--mono);
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.detail-timing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.timing-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.timing-field label {
+  width: 32px;
+  font-size: 12px;
+  color: var(--text);
+}
+.timing-field button {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.timing-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.timing-actions button {
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.timing-actions .play-button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+}
+
+.time-input {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.detail-textarea {
+  font-size: 14px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-h);
+  resize: vertical;
+  min-height: 70px;
+  width: 100%;
+  font-family: var(--sans);
+}
+.detail-textarea.translation {
+  color: var(--accent);
+}
+
+.saving-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  display: inline-block;
+}
+
+.saved-check {
+  font-size: 12px;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.timing-actions .danger-button {
+  margin-left: auto;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  font-weight: 700;
+}
+.timing-actions .danger-button:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.keyboard-hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.detail-diffs h3 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warning);
+  margin: 4px 0 8px;
+}
+

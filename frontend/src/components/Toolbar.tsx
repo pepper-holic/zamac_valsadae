@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MediaItem, Project } from '../api/types'
 import { deleteProject } from '../api/client'
+import { AboutModal } from './AboutModal'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
-import { LegalPagesModal } from './legal/LegalPagesModal'
+
+// TODO: 실제 도메인이 배포되면 website/ 프로젝트의 실제 주소로 교체하세요.
+const WEBSITE_URL = 'https://zamacvalsadae.example'
 
 const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 
@@ -36,6 +39,7 @@ type Props = {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
+  onGoHome: () => void
 }
 
 export function Toolbar({
@@ -54,11 +58,12 @@ export function Toolbar({
   canRedo,
   onUndo,
   onRedo,
+  onGoHome,
 }: Props) {
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
-  const [isLegalOpen, setIsLegalOpen] = useState(false)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isDeletingProject, setIsDeletingProject] = useState(false)
   const [isDeletingItem, setIsDeletingItem] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -151,10 +156,15 @@ export function Toolbar({
   return (
     <header className="toolbar" ref={toolbarRef}>
       <div className="toolbar-zone toolbar-zone-brand">
-        <div className="toolbar-brand">
+        <button
+          type="button"
+          className="toolbar-brand toolbar-brand-button"
+          onClick={onGoHome}
+          data-tip="메인 페이지로 돌아갑니다."
+        >
           <span className="toolbar-brand-mark" aria-hidden="true">Z</span>
           Zamak_Valsadae
-        </div>
+        </button>
         <div className="toolbar-divider" aria-hidden="true" />
         <div className="toolbar-workspace-switcher">
           <select
@@ -292,14 +302,25 @@ export function Toolbar({
         </div>
       )}
 
+      <a
+        className="toolbar-icon-button"
+        href={WEBSITE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-tip="서비스 웹사이트로 이동합니다 (소개 · 다운로드 · 가격 정책 등)."
+        aria-label="웹사이트로 이동"
+      >
+        ↗
+      </a>
+
       <button
         type="button"
         className="toolbar-icon-button"
-        onClick={() => setIsLegalOpen(true)}
-        data-tip="이용약관, 개인정보처리방침, 회사 소개 등 서비스 준비 문서를 봅니다 (초안, 더미 데이터 포함)."
-        aria-label="약관 및 회사 정보"
+        onClick={() => setIsAboutOpen(true)}
+        data-tip="프로그램 정보를 봅니다."
+        aria-label="프로그램 정보"
       >
-        §
+        ⓘ
       </button>
 
       <button
@@ -329,7 +350,7 @@ export function Toolbar({
       )}
 
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
-      {isLegalOpen && <LegalPagesModal onClose={() => setIsLegalOpen(false)} />}
+      {isAboutOpen && <AboutModal onClose={() => setIsAboutOpen(false)} />}
     </header>
   )
 }

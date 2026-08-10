@@ -36,6 +36,11 @@ if not errorlevel 1 (
   echo Found python.exe process with uvicorn in command line. Attempting to terminate all matching python.exe processes...
   taskkill /IM python.exe /F >nul 2>&1
 )
+tasklist /FI "IMAGENAME eq pythonw.exe" >nul 2>&1
+if not errorlevel 1 (
+  echo Found pythonw.exe process ^(desktop app window^). Terminating pythonw.exe...
+  taskkill /IM pythonw.exe /F >nul 2>&1
+)
 tasklist /FI "IMAGENAME eq node.exe" /FO TABLE | findstr /I vite >nul
 if not errorlevel 1 (
   echo Found node.exe process with Vite in command line. Terminating node.exe...
