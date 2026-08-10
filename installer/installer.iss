@@ -16,6 +16,11 @@
 ; users ("Windows protected your PC") - they need to click "More info" ->
 ; "Run anyway". A code-signing certificate removes this warning but is a
 ; separate, paid step not covered here.
+;
+; run.bat launches the app in a native window via pywebview (WebView2), not
+; a browser tab. WebView2 Runtime ships with Windows 10/11 by default; only
+; very old/unpatched systems would need to install it separately from
+; Microsoft.
 
 #define MyAppName "Zamak_Valsadae (자막발사대)"
 #define MyAppVersion "1.0.0"
