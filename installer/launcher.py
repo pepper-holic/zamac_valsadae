@@ -45,8 +45,12 @@ def _show_error(message: str) -> None:
 
 
 def _ensure_runtime(root_dir: Path, splash: Splash) -> None:
-    python_exe = root_dir / "runtime" / "python" / "python.exe"
-    if python_exe.exists():
+    # Gated on install.ps1's completion marker, not python.exe: an
+    # interrupted first run can leave python.exe present but pip/site-packages
+    # never set up, and install.ps1 itself now repairs that on retry - but
+    # only if it actually gets invoked again instead of being skipped here.
+    install_complete = root_dir / "runtime" / ".install_complete"
+    if install_complete.exists():
         return
 
     log_path = root_dir / "install.log"

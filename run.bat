@@ -1,7 +1,7 @@
 @echo off
 set "ROOT_DIR=%~dp0"
 
-if not exist "%ROOT_DIR%runtime\python\python.exe" (
+if not exist "%ROOT_DIR%runtime\.install_complete" (
     echo First launch detected - installing the portable runtime and dependencies.
     echo This downloads Python/Node.js/ffmpeg and installs packages ^(a few GB, one-time^).
     echo.

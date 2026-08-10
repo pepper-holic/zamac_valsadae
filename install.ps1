@@ -50,7 +50,16 @@ try {
         $zipPath = Join-Path $TmpDir "python-embed.zip"
         Invoke-WebRequest -Uri $PythonDownloadUrl -OutFile $zipPath
         Expand-Archive -Path $zipPath -DestinationPath $PythonDir -Force
+    }
 
+    # Enabling pip support and installing pip is intentionally OUTSIDE the
+    # "already installed" check above and gated on pip.exe specifically, not
+    # python.exe: if a previous run got interrupted after extracting Python
+    # but before get-pip.py finished, python.exe already exists forever
+    # after that, and gating this block on it too would silently skip pip
+    # setup - and therefore all backend package installs - on every retry.
+    $PipExe = Join-Path $PythonDir "Scripts\pip.exe"
+    if (-not (Test-Path $PipExe)) {
         Write-Host "Enabling pip support in the embedded Python..."
         Get-ChildItem -Path $PythonDir -Filter "python3*._pth" | ForEach-Object {
             (Get-Content $_.FullName) -replace '#\s*import site', 'import site' |
@@ -139,6 +148,12 @@ try {
     } finally {
         Pop-Location
     }
+
+    # Written only once every step above has actually succeeded - callers
+    # (run.bat, the native launcher) gate on this marker rather than on
+    # python.exe existing, so an interrupted first run gets retried in full
+    # next time instead of being treated as done.
+    Set-Content -Path (Join-Path $RuntimeDir ".install_complete") -Value (Get-Date -Format "o")
 
     Write-Host ""
     Write-Host "============================================" -ForegroundColor Green
