@@ -15,6 +15,9 @@ OUTPUT_PATH = Path(__file__).resolve().parent / "icon.ico"
 
 
 def _draw_icon() -> Image.Image:
+    """A rocket launching on a trail of subtitle bars - "자막발사대" (subtitle
+    launchpad) is a literal cannon/launchpad for subtitles, so the exhaust
+    plume is drawn as tapering subtitle-line bars instead of generic smoke."""
     image = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
 
@@ -23,17 +26,17 @@ def _draw_icon() -> Image.Image:
         [margin, margin, SIZE - margin, SIZE - margin], radius=48, fill=ACCENT
     )
 
-    # Two subtitle-line bars, evoking a captions/subtitle track.
-    bar_height = 20
-    draw.rounded_rectangle(
-        [64, 108, 192, 108 + bar_height], radius=bar_height // 2, fill=WHITE
-    )
-    draw.rounded_rectangle(
-        [64, 140, 160, 140 + bar_height], radius=bar_height // 2, fill=WHITE
-    )
+    # Rocket: nose cone, body, porthole (cut out to accent), and fins.
+    draw.polygon([(128, 42), (104, 96), (152, 96)], fill=WHITE)
+    draw.rounded_rectangle([104, 90, 152, 150], radius=12, fill=WHITE)
+    draw.ellipse([118, 104, 138, 124], fill=ACCENT)
+    draw.polygon([(104, 128), (104, 156), (82, 156)], fill=WHITE)
+    draw.polygon([(152, 128), (152, 156), (174, 156)], fill=WHITE)
 
-    # Small play triangle above the bars, evoking video playback.
-    draw.polygon([(112, 56), (112, 96), (148, 76)], fill=WHITE)
+    # Exhaust trail made of subtitle bars, tapering down.
+    draw.rounded_rectangle([98, 168, 158, 180], radius=6, fill=WHITE)
+    draw.rounded_rectangle([104, 190, 152, 202], radius=6, fill=WHITE)
+    draw.rounded_rectangle([112, 212, 144, 224], radius=6, fill=WHITE)
 
     return image
 
