@@ -92,8 +92,9 @@ npm run dev
 - `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
 - `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
 - `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
-- `docs/pages/` — 서버 호스팅(SaaS) 전환 시 필요한 페이지 초안(이용약관/개인정보처리방침/
-  가격 정책 등). `[T.B.D]` 표시는 사업자 등록·요금제 확정 후 채워야 하는 항목입니다.
+- `website/` — 서비스 소개·다운로드·가격 정책·이용약관 등 마케팅/서비스 페이지 전용 독립
+  웹사이트(Vite + React Router). 앱(`frontend/`)과 별개로 배포합니다. 여러 페이지에 더미
+  (예시) 데이터가 포함되어 있으니 상세는 `website/README.md` 참고.
 
 ## 내부 개발 가이드
 

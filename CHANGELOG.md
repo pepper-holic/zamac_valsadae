@@ -39,12 +39,16 @@
 - 서비스 웹페이지(소개/다운로드/가격 정책/이용약관 등)를 앱에서 완전히 분리해 별도
   `website/` 프로젝트로 이동 — 앱 안에는 웹사이트로 가는 링크(아이콘)와 "프로그램 정보"
   모달만 남기고, 순수 기능(전사/번역/스타일/검수/내보내기)에 집중하도록 정리.
+- `docs/pages/` 디렉터리 삭제 — 이관 완료된 `website/src/content/`와 내용이 어긋날 위험이
+  있는 중복 원본이라 정리(`learn.md`는 `HelpModal`과 중복이라 이관 없이 삭제).
 - 프론트엔드 전체 리팩토링 — `App.css`(2013줄)를 13개 기능별 파일로 분리
   (`src/styles/`), `App.tsx`(730줄)를 커스텀 훅(`useProjectWorkspace`,
   `useSegmentEditing`, `useReviewDiffs`, `useKeyboardShortcuts`, `usePanelWidths`)으로
   분리해 314줄로 축소, `VideoStage.tsx`(461줄)를 `Timeline`/`TransportControls`
   컴포넌트와 `useTimelineZoom`/`useVideoAspectRatio` 훅으로 분리. 이제 프론트엔드
   소스 파일 전부 400줄 이하.
+- `Timeline`, `useSegmentEditing`, `useProjectWorkspace`에 대한 테스트 17개 추가
+  (총 6개 파일, 40개 테스트 통과).
 
 ### Fixed
 

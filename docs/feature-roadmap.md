@@ -669,19 +669,19 @@ Vrew(vrew.ai/ko/)를 실제로 탐색해 상단 내비게이션·푸터·가격 
 
 | # | 항목 | 비고 | 상태 |
 |---|---|---|---|
-| 31 | 이용약관 (Terms of Service) | 전자상거래법상 유료 서비스는 필수 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/terms-of-service.md`, 사업자 정보/요금 조항/관할 법원은 더미(예시) 값, 실제 등록 후 교체 필요 |
-| 32 | 개인정보처리방침 (Privacy Policy) | 개인정보보호법상 필수 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/privacy-policy.md`, 수집 항목/보유기간/위탁 업체/책임자는 더미(예시) 값, 실제 정책 확정 후 교체 필요 |
-| 33 | 환불 안내 (Refund Policy) | 구독/과금 방식이 정해져야 조건 확정 가능 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/refund-policy.md`, 구독 주기/환불 제한 사유/처리 기간은 더미(예시) 값 |
-| 34 | 회사 소개 + 사업자 정보 푸터 | 대표자/사업자등록번호/통신판매업신고번호/주소/연락처 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/company.md`, 사업자 정보 표 전체가 더미(예시) 값 |
-| 35 | 가격 정책 페이지 | 플랜 구조가 사업 결정 사항 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/pricing.md`, 플랜명/가격/한도/과금 단위는 더미(예시) 값 |
-| 36 | 다운로드 페이지 | OS별 배포판 | [x] 작성 (2026-08-09), 다운로드 링크 더미 채움 (2026-08-10) — `docs/pages/download.md`. Windows는 실제 내용(포터블 설치 + `.exe`), macOS/Ubuntu는 여전히 [T.B.D](빌드 자체가 없어 더미로 채울 수 없음) |
-| 37 | 로그인/체험하기 CTA | 클라우드 계정 시스템 필요 — 콘텐츠가 아니라 기능 | [x] 요구사항 메모 작성 (2026-08-09), 더미 제안값 채움 (2026-08-10) — `docs/pages/login-signup.md` (실제 UI는 만들지 않음, 인증 방식·구현체는 논의 시작용 더미 제안) |
+| 31 | 이용약관 (Terms of Service) | 전자상거래법상 유료 서비스는 필수 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesLegal.tsx`(TERMS_PAGE), 사업자 정보/요금 조항/관할 법원은 더미(예시) 값, 실제 등록 후 교체 필요 |
+| 32 | 개인정보처리방침 (Privacy Policy) | 개인정보보호법상 필수 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesLegal.tsx`(PRIVACY_PAGE), 수집 항목/보유기간/위탁 업체/책임자는 더미(예시) 값 |
+| 33 | 환불 안내 (Refund Policy) | 구독/과금 방식이 정해져야 조건 확정 가능 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesLegal.tsx`(REFUND_PAGE) |
+| 34 | 회사 소개 + 사업자 정보 푸터 | 대표자/사업자등록번호/통신판매업신고번호/주소/연락처 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesBiz.tsx`(COMPANY_PAGE) |
+| 35 | 가격 정책 페이지 | 플랜 구조가 사업 결정 사항 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesBiz.tsx`(PRICING_PAGE) |
+| 36 | 다운로드 페이지 | OS별 배포판 | [x] 작성, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesBiz.tsx`(DOWNLOAD_PAGE). Windows는 실제 내용, macOS/Ubuntu는 여전히 빌드 자체가 없어 [T.B.D] |
+| 37 | 로그인/체험하기 CTA | 클라우드 계정 시스템 필요 — 콘텐츠가 아니라 기능 | [x] 요구사항 메모 작성, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesBiz.tsx`(LOGIN_PAGE), 실제 UI/구현은 #45 참고 |
 | 38 | 데이터 보호 안내 페이지 | 업로드한 영상/오디오가 서버에서 어떻게 저장·삭제되는지 설명 | [x] 완료 (2026-08-09) — `HelpModal`에 "데이터 보호" 섹션 추가 |
-| 39 | 인사이트/사용법 배우기(콘텐츠) | 블로그류 콘텐츠 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/learn.md`(실제 내용, `HelpModal`과 동기화 필요), `docs/pages/insights.md`(운영 주기/주제 방향 더미 제안값) |
-| 40 | 커뮤니티/공지사항 | 사용자 규모가 어느 정도 있어야 의미 있음 | [x] 초안 작성 (2026-08-09), 더미 값 채움 (2026-08-10) — `docs/pages/community.md`(채널 링크 더미), `docs/pages/notices.md`(첫 공지 시드, 날짜 더미) |
+| 39 | 인사이트/사용법 배우기(콘텐츠) | 블로그류 콘텐츠 | [x] 인사이트는 `website/src/content/legalPagesBiz.tsx`(INSIGHTS_PAGE)로 이관 완료 (2026-08-10). "사용법 배우기"(옛 `docs/pages/learn.md`)는 `HelpModal`과 내용이 중복되어 별도 이관 없이 삭제 |
+| 40 | 커뮤니티/공지사항 | 사용자 규모가 어느 정도 있어야 의미 있음 | [x] 초안 작성, 더미 값 채움, `website/`로 이관 완료 (2026-08-10) — `website/src/content/legalPagesBiz.tsx`(COMMUNITY_PAGE, NOTICES_PAGE) |
 
-**주의점**: `docs/pages/`의 사업자등록번호, 통신판매업신고번호, 요금제 숫자, 관할 법원,
-개인정보보호책임자 등은 2026-08-10에 **더미(예시) 값**으로 채워졌습니다 — 실제 사업자 등록·
+**주의점**: `website/src/content/`의 사업자등록번호, 통신판매업신고번호, 요금제 숫자, 관할
+법원, 개인정보보호책임자 등은 2026-08-10에 **더미(예시) 값**으로 채워졌습니다 — 실제 사업자 등록·
 요금제 설계가 끝나면 진짜 값으로 교체해야 하며, 각 파일 상단에 "더미" 경고 문구를 남겨뒀습니다.
 macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우지 않고 사실 그대로 [T.B.D]로
 남겼습니다(존재하지 않는 걸 있는 것처럼 채우면 오히려 오해를 유발하므로). **이용약관·
@@ -699,12 +699,12 @@ macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우�
 |---|---|---|---|
 | 41 | `run.bat` 실사용 환경 최종 확인 | 개발 환경(샌드박스)에서는 창이 뜨는 것까지 확인했지만, 실제 사용자 데스크톱에서 `install.bat` → `run.bat` 더블클릭 흐름 재확인 필요 | [ ] 사용자 확인 대기 |
 | 42 | `website/` 실제 배포 | 아직 어떤 도메인/호스팅(Vercel, Netlify, S3+CDN 등)에도 안 올라가 있음. 배포 후 `frontend/src/components/Toolbar.tsx`의 `WEBSITE_URL` 더미 값(`https://zamacvalsadae.example`)을 실제 주소로 교체 필요 | [ ] 미착수 |
-| 43 | `docs/pages/*.md`와 `website/src/content/`의 중복 정리 | 이번에 레거시 문서(`docs/pages/`)의 텍스트를 실제 웹사이트 콘텐츠(`website/src/content/`)로 옮기면서 원본은 지우지 않고 남겨뒀음 — 둘이 어긋나기 시작하면 헷갈리므로, `docs/pages/`를 이력 참고용으로 유지할지 삭제할지 결정 필요 | [ ] 결정 필요 |
+| 43 | `docs/pages/*.md`와 `website/src/content/`의 중복 정리 | `website/src/content/`가 유일한 정본이 되도록 `docs/pages/` 디렉터리를 통째로 삭제(2026-08-10). `learn.md`는 `HelpModal`과 중복이라 별도 이관 없이 삭제, 나머지 10개 페이지는 전부 `website/src/content/legalPagesLegal.tsx` / `legalPagesBiz.tsx`로 이미 이관되어 있었음 | [x] 완료 (2026-08-10) |
 | 44 | 번역/AI 검수 서버 API 연동 | "전사는 로컬, 번역·검수는 서버"로 방향을 정함(2026-08-10 논의) — `backend/app/services/translation_service.py`의 API 엔진이 사용자 운영 서버를 가리키도록 배선, AI 검수도 지금의 "수동 파일 내려받기/올리기" 방식에서 서버 API 자동 호출로 전환 | [ ] 설계/구현 필요 |
 | 45 | 로그인/계정 시스템 실제 구현 | `website/src/pages`의 로그인/체험하기는 아직 요구사항 메모 단계(더미 제안값만 있음) — 인증 방식·구현체(Supabase Auth 등) 확정 후 실제 회원가입/로그인 플로우 구현 필요. 44번(서버 API 연동)과 맞물림 — 서버 API에 과금/사용량 제한을 걸려면 계정 시스템이 선행되어야 함 | [ ] 미착수 |
 | 46 | 설치 프로그램 코드 서명 (#29) | 배포 규모 확정 전까지 보류, 유료 인증서 필요 | [ ] 보류 |
 | 47 | 사업자 정보·가격 정책 실제 값 확정 | `website/src/content/`와 `docs/pages/`에 흩어진 더미 값(사업자등록번호, 요금제 숫자 등)을 사업자 등록·요금제 설계 완료 후 일괄 교체 | [ ] 사업 결정 대기 |
-| 48 | 프론트엔드 테스트 커버리지 확대 | 현재 `SegmentList`만 컴포넌트 테스트가 있음 — `Timeline`, `useSegmentEditing`, `useProjectWorkspace` 등 이번에 분리한 훅/컴포넌트도 우선순위 높은 후보 | [ ] 다음 착수 후보 |
+| 48 | 프론트엔드 테스트 커버리지 확대 | `Timeline`(5개), `useSegmentEditing`(6개), `useProjectWorkspace`(6개) 테스트 추가 완료 (2026-08-10) — 총 6개 파일 40개 테스트 통과. `Toolbar`, `SubtitleStylePanel` 등은 여전히 테스트 없음, 다음 후보로 남겨둠 | [x] 1차 완료 (2026-08-10) |
 
 **참고**: 44~45번(서버 연동, 계정 시스템)이 이번 로드맵에서 가장 크고 실제 아키텍처 변경이
 필요한 작업입니다. 착수 전 별도 설계 문서(API 인증 방식, 요금 정산 방식, 로컬 앱↔서버 통신
