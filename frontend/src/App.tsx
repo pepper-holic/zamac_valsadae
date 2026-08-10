@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './styles/index.css'
 import { mediaUrl } from './api/client'
+import { GlobalTooltip } from './components/GlobalTooltip'
 import { ProgressToast } from './components/ProgressToast'
 import { HomeView } from './components/home/HomeView'
 import { ReviewPanel } from './components/ReviewPanel'
@@ -146,6 +147,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <GlobalTooltip />
       <Toolbar
         projects={projects}
         project={project}

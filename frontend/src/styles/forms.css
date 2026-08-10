@@ -38,29 +38,6 @@
   outline: none;
 }
 
-/* PanelHint always sits at the very top of its (scrollable, overflow-hidden)
-   panel, so the shared [data-tip] tooltip's default upward placement gets
-   clipped there too (same issue as the top toolbar) - open downward. */
-.panel-hint::after {
-  top: calc(100% + 9px);
-  bottom: auto;
-  transform: translateX(-50%) translateY(-4px);
-}
-
-.panel-hint::before {
-  top: calc(100% + 4px);
-  bottom: auto;
-  border-top-color: transparent;
-  border-bottom-color: var(--text-h);
-}
-
-.panel-hint:hover::after,
-.panel-hint:focus-visible::after,
-.panel-hint:hover::before,
-.panel-hint:focus-visible::before {
-  transform: translateX(-50%) translateY(0);
-}
-
 .panel-row {
   display: flex;
   align-items: center;

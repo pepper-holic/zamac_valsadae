@@ -212,26 +212,3 @@
   background: var(--surface);
 }
 
-/* Toolbar sits at the very top of the window, so the shared [data-tip]
-   tooltip (which opens upward by default) has nowhere to go and gets
-   clipped by the viewport edge - flip it to open downward here only. */
-.toolbar [data-tip]::after {
-  top: calc(100% + 9px);
-  bottom: auto;
-  transform: translateX(-50%) translateY(-4px);
-}
-
-.toolbar [data-tip]::before {
-  top: calc(100% + 4px);
-  bottom: auto;
-  border-top-color: transparent;
-  border-bottom-color: var(--text-h);
-}
-
-.toolbar [data-tip]:hover::after,
-.toolbar [data-tip]:focus-visible::after,
-.toolbar [data-tip]:hover::before,
-.toolbar [data-tip]:focus-visible::before {
-  transform: translateX(-50%) translateY(0);
-}
-

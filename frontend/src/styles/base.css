@@ -4,17 +4,18 @@
   height: 100svh;
 }
 
-/* ---------- Hover guide tooltips ---------- */
-[data-tip] {
-  position: relative;
-}
-
-[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 9px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+/* ---------- Hover guide tooltips ----------
+   The bubble itself is rendered by <GlobalTooltip> (portaled to <body>,
+   position: fixed, computed from the hovered element's real screen
+   position) - see components/GlobalTooltip.tsx for why: a pure-CSS
+   ::after/::before anchored to the trigger gets clipped by any ancestor's
+   overflow:hidden/auto whenever the trigger sits close to that container's
+   edge, which turned out to be nearly everywhere in this layout (toolbar,
+   panel headings, video controls, ...). This block only styles the portaled
+   bubble; [data-tip] elements themselves need no CSS. */
+.global-tooltip {
+  position: fixed;
+  transform: translateX(-50%);
   background: var(--text-h);
   color: var(--bg);
   font-size: 12px;
@@ -25,35 +26,29 @@
   max-width: 240px;
   text-align: left;
   white-space: pre-line;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
-  z-index: 60;
+  z-index: 1000;
   box-shadow: var(--shadow);
 }
 
-[data-tip]::before {
-  content: "";
+.global-tooltip::after {
+  content: '';
   position: absolute;
-  bottom: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   border: 5px solid transparent;
-  border-top-color: var(--text-h);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-  z-index: 60;
 }
 
-[data-tip]:hover::after,
-[data-tip]:focus-visible::after,
-[data-tip]:hover::before,
-[data-tip]:focus-visible::before {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
+.global-tooltip-top {
+  transform: translateX(-50%) translateY(-100%);
+}
+.global-tooltip-top::after {
+  top: 100%;
+  border-top-color: var(--text-h);
+}
+
+.global-tooltip-bottom::after {
+  bottom: 100%;
+  border-bottom-color: var(--text-h);
 }
 
