@@ -14,7 +14,7 @@ export function Layout() {
     <div className="site-shell">
       <header className="site-header">
         <NavLink to="/" className="site-brand">
-          <span className="site-brand-mark" aria-hidden="true">Z</span>
+          <img className="site-brand-mark" src="/app-icon-glyph.png" alt="" aria-hidden="true" />
           Zamak_Valsadae
         </NavLink>
         <nav className="site-nav" aria-label="주요 메뉴">

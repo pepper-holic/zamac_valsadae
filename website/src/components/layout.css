@@ -27,16 +27,13 @@
   text-decoration: none;
 }
 .site-brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 26px;
   height: 26px;
+  padding: 5px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .site-nav {
