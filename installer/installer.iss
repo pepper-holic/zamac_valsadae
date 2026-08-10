@@ -21,6 +21,14 @@
 ; a browser tab. WebView2 Runtime ships with Windows 10/11 by default; only
 ; very old/unpatched systems would need to install it separately from
 ; Microsoft.
+;
+; Shortcuts point at ZamakValsadae.exe (built from launcher.py via
+; build_launcher.bat - run that FIRST so launcher_dist\ZamakValsadae.exe
+; exists before compiling this script). It's a small PyInstaller-built
+; native launcher that does exactly what run.bat does, but with no visible
+; window at all - including on first launch, when the runtime install runs
+; hidden with output captured to install.log next to the exe. run.bat/
+; install.bat are still bundled as a manual/troubleshooting fallback.
 
 #define MyAppName "Zamak_Valsadae (자막발사대)"
 #define MyAppVersion "1.0.0"
@@ -62,11 +70,12 @@ Source: "..\env.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\kill-servers.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "launcher_dist\ZamakValsadae.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Zamak_Valsadae"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"
+Name: "{group}\Zamak_Valsadae"; Filename: "{app}\ZamakValsadae.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"
 Name: "{group}\제거"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\Zamak_Valsadae"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
+Name: "{userdesktop}\Zamak_Valsadae"; Filename: "{app}\ZamakValsadae.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\run.bat"; Description: "설치 마치고 바로 실행 (최초 실행 시 런타임 다운로드로 인터넷 필요, 수 분~수십 분 소요)"; Flags: postinstall shellexec skipifsilent nowait
+Filename: "{app}\ZamakValsadae.exe"; Description: "설치 마치고 바로 실행 (최초 실행 시 런타임 다운로드로 인터넷 필요, 수 분~수십 분 소요)"; Flags: postinstall skipifsilent nowait
