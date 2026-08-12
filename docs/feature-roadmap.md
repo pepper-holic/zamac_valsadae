@@ -700,8 +700,8 @@ macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우�
 | 41 | `run.bat` 실사용 환경 최종 확인 | 개발 환경(샌드박스)에서는 창이 뜨는 것까지 확인했지만, 실제 사용자 데스크톱에서 `install.bat` → `run.bat` 더블클릭 흐름 재확인 필요 | [ ] 사용자 확인 대기 |
 | 42 | `website/` 실제 배포 | 아직 어떤 도메인/호스팅(Vercel, Netlify, S3+CDN 등)에도 안 올라가 있음. 배포 후 `frontend/src/components/Toolbar.tsx`의 `WEBSITE_URL` 더미 값(`https://zamacvalsadae.example`)을 실제 주소로 교체 필요 | [ ] 미착수 |
 | 43 | `docs/pages/*.md`와 `website/src/content/`의 중복 정리 | `website/src/content/`가 유일한 정본이 되도록 `docs/pages/` 디렉터리를 통째로 삭제(2026-08-10). `learn.md`는 `HelpModal`과 중복이라 별도 이관 없이 삭제, 나머지 10개 페이지는 전부 `website/src/content/legalPagesLegal.tsx` / `legalPagesBiz.tsx`로 이미 이관되어 있었음 | [x] 완료 (2026-08-10) |
-| 44 | 번역/AI 검수 서버 API 연동 | "전사는 로컬, 번역·검수는 서버"로 방향을 정함(2026-08-10 논의) — `backend/app/services/translation_service.py`의 API 엔진이 사용자 운영 서버를 가리키도록 배선, AI 검수도 지금의 "수동 파일 내려받기/올리기" 방식에서 서버 API 자동 호출로 전환 | [ ] 설계/구현 필요 |
-| 45 | 로그인/계정 시스템 실제 구현 | `website/src/pages`의 로그인/체험하기는 아직 요구사항 메모 단계(더미 제안값만 있음) — 인증 방식·구현체(Supabase Auth 등) 확정 후 실제 회원가입/로그인 플로우 구현 필요. 44번(서버 API 연동)과 맞물림 — 서버 API에 과금/사용량 제한을 걸려면 계정 시스템이 선행되어야 함 | [ ] 미착수 |
+| 44 | 번역/AI 검수 서버 API 연동 | 오라클 클라우드 프리티어 VM(168.110.107.78)에 `server/` 릴레이 인프라 구축 완료(2026-08-12) — 아래 상세 참고. AI 검수 자동화(수동 파일 왕복 → 서버 자동 호출)는 후속 라운드로 분리, 아직 미착수 | [~] 인프라 완료, 자격증명 대기 (2026-08-12) |
+| 45 | 로그인/계정 시스템 실제 구현 | Supabase Auth로 방향 확정(2026-08-12), `server/app/auth.py`에 JWT 검증 로직까지 작성 완료 — Supabase 프로젝트 자체를 아직 안 만들어서 실제 로그인은 불가. 데스크톱 앱의 로그인 UI(Toolbar/App.tsx)는 별도 후속 라운드 | [~] 서버 측 검증 로직 완료, Supabase 프로젝트 생성 대기 (2026-08-12) |
 | 46 | 설치 프로그램 코드 서명 (#29) | 배포 규모 확정 전까지 보류, 유료 인증서 필요 | [ ] 보류 |
 | 47 | 사업자 정보·가격 정책 실제 값 확정 | `website/src/content/`와 `docs/pages/`에 흩어진 더미 값(사업자등록번호, 요금제 숫자 등)을 사업자 등록·요금제 설계 완료 후 일괄 교체 | [ ] 사업 결정 대기 |
 | 48 | 프론트엔드 테스트 커버리지 확대 | `Timeline`(5개), `useSegmentEditing`(6개), `useProjectWorkspace`(6개) 테스트 추가 완료 (2026-08-10). `Toolbar`(8개), `SubtitleStylePanel`(6개) 테스트 추가 완료 (2026-08-12) — 총 8개 파일 55개 테스트 통과. 남은 후보: `ExportPanel`, `ReviewPanel` | [x] 2차 완료 (2026-08-12) |
@@ -709,3 +709,41 @@ macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우�
 **참고**: 44~45번(서버 연동, 계정 시스템)이 이번 로드맵에서 가장 크고 실제 아키텍처 변경이
 필요한 작업입니다. 착수 전 별도 설계 문서(API 인증 방식, 요금 정산 방식, 로컬 앱↔서버 통신
 프로토콜)를 먼저 작성하는 것을 권장합니다.
+
+### 44~45. 서버 릴레이 인프라 구축 (2026-08-12)
+
+사용자가 보유한 오라클 클라우드 프리티어 VM(168.110.107.78, Oracle Linux 9.7, 2 vCPU, RAM 1GB)을
+서버로 쓰기로 결정. 조사 결과 번역 쪽은 이미 서버 경유 구조가 거의 다 되어 있었음 —
+`backend/app/services/translation_service.py`의 `ApiTranslator`가 OpenAI 호환
+`{base_url}/chat/completions`를 호출하고 `base_url`은 `TRANSLATION_API_BASE_URL` 환경변수로
+이미 교체 가능(`backend/app/core/config.py:72`). 즉 "서버 릴레이"는 같은 모양의 프록시 서버를
+올리고 로컬 앱 env만 그 주소로 돌리면 됨 — 클라이언트 코드 변경 불필요.
+
+**구축 완료**:
+- 신규 `server/` 디렉터리(FastAPI, `backend/`와 동일한 `dataclass` Settings + `os.environ.get`
+  컨벤션) — `GET /healthz`(인증 불필요), `POST /v1/chat/completions`(Supabase JWT 검증 후
+  서버 보관 OpenAI 키로 대리 호출). 테스트 8개(`server/tests/`) 통과.
+- 오라클 VM: 전용 비루트 사용자 `relay`, `/opt/relay`에 앱 배포 + venv, systemd
+  `relay.service`(자동 재시작), nginx 리버스 프록시(`80 → 127.0.0.1:8000`), OS 방화벽(firewalld)
+  80/443 오픈, SELinux `httpd_can_network_connect` 활성화 — 전부 로컬(127.0.0.1)에서는 정상
+  응답 확인.
+- 도메인은 소유 도메인 없이 `168-110-107-78.nip.io`(nip.io, 실제 IP를 가리키는 무료 와일드카드
+  DNS)를 쓰기로 함 — Let's Encrypt 인증서 발급 가능.
+
+**막혀서 다음 세션으로 넘어간 것** (전부 사용자 액션 필요, 대신 처리 불가):
+- 외부에서 80번 포트 접속 시도 시 타임아웃 확인 — 오라클 클라우드 **VCN Security List**가
+  OS 방화벽과 별개로 80/443을 막고 있음. OCI 콘솔에서 Ingress 룰 추가 필요(OCI API 자격증명이
+  없어 대신 열 수 없음).
+- Security List가 열리면 `sudo certbot --nginx -d 168-110-107-78.nip.io`로 TLS 인증서 발급
+- **OpenAI API 키** 미발급 — 발급 전까지 `/v1/chat/completions`는 503 반환
+- **Supabase 프로젝트** 미생성 — 생성 전까지 `/v1/chat/completions`는 501 반환(JWT 검증 불가)
+- 위 2개 자격증명이 준비되면 `/opt/relay/.env`에 채우고 `sudo systemctl restart relay`로 활성화,
+  이후 로컬 앱의 `TRANSLATION_API_KEY`/`TRANSLATION_API_BASE_URL`을 이 서버를 가리키도록 설정
+
+**이번에 의도적으로 범위 밖에 둔 것**:
+- AI 검수 자동 서버 호출 전환(`backend/app/api/review.py`, `ReviewPanel.tsx`) — 같은 릴레이
+  재사용 가능하나 새 백엔드 엔드포인트 + 프론트 UI 작업이 필요해 별도 라운드
+- 데스크톱 앱의 실제 로그인 UI(회원가입/로그인 화면, 세션 토큰 저장) — Toolbar/App.tsx를
+  건드리는 별도 규모의 프론트엔드 작업
+
+상세 배포 절차와 트러블슈팅 메모는 `server/README.md` 참고.

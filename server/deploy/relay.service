@@ -1,0 +1,18 @@
+[Unit]
+Description=Zamac Valsadae relay (translation/review API proxy)
+After=network.target
+
+[Service]
+Type=simple
+User=relay
+Group=relay
+WorkingDirectory=/opt/relay
+EnvironmentFile=/opt/relay/.env
+ExecStart=/opt/relay/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
