@@ -12,8 +12,8 @@
 
 ## 현재 상태 (2026-08-12)
 
-인프라와 코드는 준비됐지만 아래 2가지가 없어서 아직 실제로 동작하지 않는다 (설정 없으면
-`/v1/chat/completions`가 각각 501/503로 명확히 응답한다):
+`https://168-110-107-78.nip.io/healthz` 까지 정상 동작(TLS 포함). 아래 2가지가 없어서
+`/v1/chat/completions`만 아직 동작하지 않는다 (설정 없으면 각각 501/503로 명확히 응답한다):
 
 - `SUPABASE_JWT_SECRET` — Supabase 프로젝트를 아직 안 만들어서 없음
 - `OPENAI_API_KEY` — 아직 발급 전
@@ -30,13 +30,12 @@ nginx: 80(→443 예정) → 127.0.0.1:8000 리버스 프록시
 
 ## 남은 수동 작업
 
-1. **오라클 클라우드 콘솔** → VCN → Security List에서 80/443 Ingress 룰 추가 (OS 방화벽은 이미
-   열어뒀지만 클라우드 레벨 Security List가 별도로 막고 있을 수 있음 — Claude가 OCI API 자격증명이
-   없어 대신 열 수 없음)
-2. 80 포트가 열리면: `sudo certbot --nginx -d 168-110-107-78.nip.io` 로 TLS 인증서 발급
+1. ~~오라클 클라우드 콘솔 → VCN → Security List에서 80/443 Ingress 룰 추가~~ 완료 (2026-08-12)
+2. ~~`certbot --nginx`로 TLS 인증서 발급~~ 완료 (2026-08-12, 168-110-107-78.nip.io, 2026-11-10 만료
+   전 자동 갱신 설정됨)
 3. Supabase 프로젝트 생성 후 `SUPABASE_JWT_SECRET`을, OpenAI API 키 발급 후 `OPENAI_API_KEY`를
    서버의 `/opt/relay/.env`에 채우고 `sudo systemctl restart relay`
-4. `curl https://168-110-107-78.nip.io/healthz` 로 확인
+4. `curl https://168-110-107-78.nip.io/healthz` 로 확인 (지금도 200 OK)
 
 ## 로컬 개발
 
