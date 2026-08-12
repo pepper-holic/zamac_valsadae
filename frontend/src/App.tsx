@@ -87,8 +87,16 @@ function App() {
     handleResizeSegment,
   } = useSegmentEditing(project, setProject, selectedItemId, selectedSegmentId, setSelectedSegmentId)
 
-  const { reviewDiffs, resetReview, handleReviewImported, handleAcceptDiff, handleRejectDiff, toasts } =
-    useReviewDiffs(project, selectedItemId, handleSegmentSaved)
+  const {
+    reviewDiffs,
+    resetReview,
+    handleReviewImported,
+    handleAcceptDiff,
+    handleRejectDiff,
+    handleAcceptAllDiffs,
+    handleRejectAllDiffs,
+    toasts,
+  } = useReviewDiffs(project, selectedItemId, handleSegmentSaved)
 
   resetOnProjectLoadRef.current = useCallback(() => {
     resetHistory()
@@ -226,7 +234,14 @@ function App() {
               <SubtitleStylePanel project={project} onStyleUpdated={handleProjectUpdated} />
             )}
             {activeTool === 'review' && (
-              <ReviewPanel project={project} item={item} onImported={handleReviewImported} />
+              <ReviewPanel
+                project={project}
+                item={item}
+                onImported={handleReviewImported}
+                diffCount={reviewDiffs.length}
+                onAcceptAll={handleAcceptAllDiffs}
+                onRejectAll={handleRejectAllDiffs}
+              />
             )}
           </div>
 

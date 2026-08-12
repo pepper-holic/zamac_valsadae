@@ -5,6 +5,8 @@ from app.models.schemas import (
     MediaItem,
     Project,
     Segment,
+    SegmentBulkDeleteRequest,
+    SegmentBulkUpdateRequest,
     SegmentDetectFillersRequest,
     SegmentFindReplaceRequest,
     SegmentMergeRequest,
@@ -29,6 +31,18 @@ def _get_project_and_item(project_id: str, item_id: str, store: ProjectStore) ->
     return project, item
 
 
+def _apply_segment_update(segment: Segment, update: SegmentUpdate) -> Segment:
+    changes = update.model_dump(exclude_unset=True, exclude_none=True)
+    if "text" in changes and changes["text"] != segment.text:
+        # 원문이 바뀌면 단어별 타임스탬프 정렬이 깨지므로 비운다
+        # (부정확한 카라오케 강조보다 강조 없음이 안전).
+        changes["words"] = []
+    updated = segment.model_copy(update=changes)
+    if updated.start >= updated.end:
+        raise HTTPException(status_code=400, detail="시작 시간은 종료 시간보다 빨라야 합니다.")
+    return updated
+
+
 @router.patch("/{project_id}/items/{item_id}/segments/{segment_id}", response_model=Segment)
 async def update_segment(
     project_id: str,
@@ -41,22 +55,61 @@ async def update_segment(
 
     for index, segment in enumerate(item.segments):
         if segment.id == segment_id:
-            changes = update.model_dump(exclude_unset=True, exclude_none=True)
-            if "text" in changes and changes["text"] != segment.text:
-                # 원문이 바뀌면 단어별 타임스탬프 정렬이 깨지므로 비운다
-                # (부정확한 카라오케 강조보다 강조 없음이 안전).
-                changes["words"] = []
-            updated = segment.model_copy(update=changes)
-            if updated.start >= updated.end:
-                raise HTTPException(
-                    status_code=400, detail="시작 시간은 종료 시간보다 빨라야 합니다."
-                )
+            updated = _apply_segment_update(segment, update)
             store.push_history(item_id, item.segments)
             item.segments[index] = updated
             store.save(project)
             return updated
 
     raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
+
+
+@router.post("/{project_id}/items/{item_id}/segments/bulk-update", response_model=list[Segment])
+async def bulk_update_segments(
+    project_id: str,
+    item_id: str,
+    request: SegmentBulkUpdateRequest,
+    store: ProjectStore = Depends(get_store),
+) -> list[Segment]:
+    project, item = _get_project_and_item(project_id, item_id, store)
+
+    updates_by_id = {entry.id: entry.update for entry in request.updates}
+    missing = updates_by_id.keys() - {segment.id for segment in item.segments}
+    if missing:
+        raise HTTPException(status_code=404, detail=f"세그먼트를 찾을 수 없습니다: {', '.join(missing)}")
+
+    # Compute every new segment before mutating anything, so a validation
+    # failure partway through (e.g. bad start/end) leaves item.segments and
+    # the undo history untouched instead of applying half the batch.
+    new_segments = [
+        _apply_segment_update(segment, updates_by_id[segment.id]) if segment.id in updates_by_id else segment
+        for segment in item.segments
+    ]
+
+    store.push_history(item_id, item.segments)
+    item.segments = new_segments
+    store.save(project)
+    return [segment for segment in new_segments if segment.id in updates_by_id]
+
+
+@router.post("/{project_id}/items/{item_id}/segments/bulk-delete", response_model=list[Segment])
+async def bulk_delete_segments(
+    project_id: str,
+    item_id: str,
+    request: SegmentBulkDeleteRequest,
+    store: ProjectStore = Depends(get_store),
+) -> list[Segment]:
+    project, item = _get_project_and_item(project_id, item_id, store)
+
+    ids_to_delete = set(request.segment_ids)
+    remaining = [segment for segment in item.segments if segment.id not in ids_to_delete]
+    if len(remaining) == len(item.segments):
+        raise HTTPException(status_code=404, detail="삭제할 세그먼트를 찾을 수 없습니다.")
+
+    store.push_history(item_id, item.segments)
+    item.segments = remaining
+    store.save(project)
+    return remaining
 
 
 @router.post(

@@ -88,6 +88,19 @@ export function SegmentList({
     })
   }
 
+  function toggleSelectAllFiltered() {
+    setCheckedIds((prev) => {
+      const allSelected =
+        filteredSegments.length > 0 && filteredSegments.every((segment) => prev.has(segment.id))
+      if (allSelected) {
+        const next = new Set(prev)
+        filteredSegments.forEach((segment) => next.delete(segment.id))
+        return next
+      }
+      return new Set([...prev, ...filteredSegments.map((segment) => segment.id)])
+    })
+  }
+
   async function handleMerge() {
     setIsBulkBusy(true)
     try {
@@ -278,6 +291,17 @@ export function SegmentList({
       )}
 
       <div className="segment-filter-tabs">
+        <label
+          className="checkbox-label"
+          data-tip="현재 필터에 보이는 문장을 모두 선택합니다. 선택 후 위의 검토완료/병합/삭제 버튼으로 한 번에 처리하세요."
+        >
+          <input
+            type="checkbox"
+            checked={filteredSegments.length > 0 && filteredSegments.every((segment) => checkedIds.has(segment.id))}
+            onChange={toggleSelectAllFiltered}
+          />
+          전체 선택 ({filteredSegments.length})
+        </label>
         <span className="segment-filter-label">필터:</span>
         <button
           type="button"

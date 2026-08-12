@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { updateSegment } from '../api/client'
+import { bulkUpdateSegments, updateSegment } from '../api/client'
 import type { Project, ReviewDiffEntry, ReviewImportResult, Segment } from '../api/types'
 import type { Toast } from '../components/ProgressToast'
 
@@ -37,6 +37,27 @@ export function useReviewDiffs(
     setReviewDiffs((prev) => prev.filter((entry) => entry !== diff))
   }, [])
 
+  const handleAcceptAllDiffs = useCallback(async () => {
+    if (!project || !selectedItemId || reviewDiffs.length === 0) return
+    // Merge diffs per segment (a segment can have both a text and a
+    // translation diff) and send it as one request, so the backend records
+    // the whole batch as a single undo step instead of one per diff.
+    const changesById = new Map<string, Record<string, unknown>>()
+    for (const diff of reviewDiffs) {
+      const existing = changesById.get(diff.id) ?? {}
+      existing[diff.field] = diff.new_value
+      changesById.set(diff.id, existing)
+    }
+    const updates = [...changesById.entries()].map(([id, update]) => ({ id, update }))
+    const updated = await bulkUpdateSegments(project.id, selectedItemId, updates)
+    updated.forEach(handleSegmentSaved)
+    setReviewDiffs([])
+  }, [project, selectedItemId, reviewDiffs, handleSegmentSaved])
+
+  const handleRejectAllDiffs = useCallback(() => {
+    setReviewDiffs([])
+  }, [])
+
   const toasts: Toast[] = []
   if (reviewUnknownIds.length > 0) {
     toasts.push({
@@ -53,6 +74,8 @@ export function useReviewDiffs(
     handleReviewImported,
     handleAcceptDiff,
     handleRejectDiff,
+    handleAcceptAllDiffs,
+    handleRejectAllDiffs,
     toasts,
   }
 }

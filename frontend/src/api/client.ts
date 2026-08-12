@@ -170,6 +170,40 @@ export async function deleteSegment(
   }
 }
 
+type SegmentFieldUpdate = Partial<{
+  text: string
+  translation: string
+  start: number
+  end: number
+  reviewed: boolean
+}>
+
+export async function bulkUpdateSegments(
+  projectId: string,
+  itemId: string,
+  updates: { id: string; update: SegmentFieldUpdate }[],
+): Promise<Segment[]> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/bulk-update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates }),
+  })
+  return parseOrThrow<Segment[]>(response)
+}
+
+export async function bulkDeleteSegments(
+  projectId: string,
+  itemId: string,
+  segmentIds: string[],
+): Promise<Segment[]> {
+  const response = await fetch(`${segmentsBase(projectId, itemId)}/bulk-delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segment_ids: segmentIds }),
+  })
+  return parseOrThrow<Segment[]>(response)
+}
+
 export async function splitSegment(
   projectId: string,
   itemId: string,

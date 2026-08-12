@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import {
-  deleteSegment,
+  bulkDeleteSegments,
+  bulkUpdateSegments,
   findReplaceSegments,
   mergeSegments,
   splitSegment,
@@ -127,14 +128,12 @@ export function useSegmentEditing(
   const handleBulkDelete = useCallback(
     async (segmentIds: string[]) => {
       if (!project || !selectedItemId) return
-      await Promise.all(segmentIds.map((id) => deleteSegment(project.id, selectedItemId, id)))
+      // One request for the whole batch (not N concurrent calls) so the
+      // backend records it as a single undo step and there's no read-modify-
+      // write race between segments landing at once.
+      const remaining = await bulkDeleteSegments(project.id, selectedItemId, segmentIds)
       setProject((prev) =>
-        prev
-          ? updateItemInProject(prev, selectedItemId, (i) => ({
-              ...i,
-              segments: i.segments.filter((s) => !segmentIds.includes(s.id)),
-            }))
-          : prev,
+        prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: remaining })) : prev,
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
@@ -144,8 +143,10 @@ export function useSegmentEditing(
   const handleBulkMarkReviewed = useCallback(
     async (segmentIds: string[]) => {
       if (!project || !selectedItemId) return
-      const updates = await Promise.all(
-        segmentIds.map((id) => updateSegment(project.id, selectedItemId, id, { reviewed: true })),
+      const updates = await bulkUpdateSegments(
+        project.id,
+        selectedItemId,
+        segmentIds.map((id) => ({ id, update: { reviewed: true } })),
       )
       const byId = new Map(updates.map((u) => [u.id, u as Segment]))
       setProject((prev) =>

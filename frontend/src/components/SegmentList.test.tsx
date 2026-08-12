@@ -122,8 +122,9 @@ describe('SegmentList', () => {
 
     expect(screen.queryByText(/개 선택됨/)).not.toBeInTheDocument()
 
+    // index 0 is the "select all filtered" checkbox; row checkboxes start at 1
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[0])
+    fireEvent.click(checkboxes[1])
 
     expect(screen.getByText('1개 선택됨')).toBeInTheDocument()
   })
@@ -133,12 +134,12 @@ describe('SegmentList', () => {
     render(<SegmentList {...makeProps({ segments })} />)
 
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[0])
+    fireEvent.click(checkboxes[1])
 
     const mergeButton = screen.getByRole('button', { name: '병합' })
     expect(mergeButton).toBeDisabled()
 
-    fireEvent.click(checkboxes[1])
+    fireEvent.click(checkboxes[2])
     expect(mergeButton).not.toBeDisabled()
   })
 
@@ -148,10 +149,24 @@ describe('SegmentList', () => {
     const segments = [makeSegment({ id: 'a' }), makeSegment({ id: 'b' })]
     render(<SegmentList {...makeProps({ segments, onBulkDelete })} />)
 
-    fireEvent.click(screen.getAllByRole('checkbox')[0])
+    fireEvent.click(screen.getAllByRole('checkbox')[1])
     await user.click(screen.getByRole('button', { name: '삭제' }))
 
     expect(onBulkDelete).toHaveBeenCalledWith(['a'])
+  })
+
+  it('selects all filtered segments when "select all" is checked, and can deselect them', async () => {
+    const user = userEvent.setup()
+    const segments = [makeSegment({ id: 'a' }), makeSegment({ id: 'b' })]
+    render(<SegmentList {...makeProps({ segments })} />)
+
+    const selectAll = screen.getByRole('checkbox', { name: /전체 선택/ })
+    await user.click(selectAll)
+
+    expect(screen.getByText('2개 선택됨')).toBeInTheDocument()
+
+    await user.click(selectAll)
+    expect(screen.queryByText(/개 선택됨/)).not.toBeInTheDocument()
   })
 
   it('runs a find/replace call with the entered text', async () => {

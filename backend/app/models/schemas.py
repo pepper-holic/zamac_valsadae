@@ -154,6 +154,19 @@ class SegmentUpdate(BaseModel):
     reviewed: bool | None = None
 
 
+class SegmentBulkDeleteRequest(BaseModel):
+    segment_ids: list[str]
+
+
+class SegmentBulkUpdateEntry(BaseModel):
+    id: str
+    update: SegmentUpdate
+
+
+class SegmentBulkUpdateRequest(BaseModel):
+    updates: list[SegmentBulkUpdateEntry]
+
+
 class ReviewSegment(BaseModel):
     id: str
     start: float = 0.0

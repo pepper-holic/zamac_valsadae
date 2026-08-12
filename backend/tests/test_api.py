@@ -710,6 +710,109 @@ def test_detect_fillers_missing_item_returns_404(client):
     assert response.status_code == 404
 
 
+def test_bulk_update_applies_all_entries_in_one_request(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="one"),
+            Segment(id="s2", start=1.0, end=2.0, text="two"),
+            Segment(id="s3", start=2.0, end=3.0, text="three"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(
+        _segments_url(ctx, "/bulk-update"),
+        json={"updates": [{"id": "s1", "update": {"reviewed": True}}, {"id": "s2", "update": {"reviewed": True}}]},
+    )
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert {s["id"] for s in updated} == {"s1", "s2"}
+    assert all(s["reviewed"] for s in updated)
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    by_id = {s["id"]: s for s in item["segments"]}
+    assert by_id["s1"]["reviewed"] is True
+    assert by_id["s2"]["reviewed"] is True
+    assert by_id["s3"]["reviewed"] is False
+
+
+def test_bulk_update_missing_id_returns_404_and_changes_nothing(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="one")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(
+        _segments_url(ctx, "/bulk-update"),
+        json={"updates": [{"id": "missing", "update": {"reviewed": True}}]},
+    )
+
+    assert response.status_code == 404
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert item["segments"][0]["reviewed"] is False
+
+
+def test_bulk_delete_removes_all_given_ids_in_one_request(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="one"),
+            Segment(id="s2", start=1.0, end=2.0, text="two"),
+            Segment(id="s3", start=2.0, end=3.0, text="three"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.post(_segments_url(ctx, "/bulk-delete"), json={"segment_ids": ["s1", "s3"]})
+
+    assert response.status_code == 200
+    assert [s["id"] for s in response.json()] == ["s2"]
+
+    item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
+    assert [s["id"] for s in item["segments"]] == ["s2"]
+
+
+def test_undo_fully_reverts_a_bulk_delete_in_a_single_step(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.api.transcribe.whisper_service.transcribe",
+        lambda *a, **k: [
+            Segment(id="s1", start=0.0, end=1.0, text="one"),
+            Segment(id="s2", start=1.0, end=2.0, text="two"),
+            Segment(id="s3", start=2.0, end=3.0, text="three"),
+        ],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    client.post(_segments_url(ctx, "/bulk-delete"), json={"segment_ids": ["s1", "s2", "s3"]})
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/undo")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [s["id"] for s in body["segments"]] == ["s1", "s2", "s3"]
+    # a bulk op is one history entry, so one undo is enough regardless of how
+    # many segments it touched - it must not still have a partial undo left
+    assert body["can_undo"] is False
+
+
 def test_undo_restores_segment_text_before_last_update(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(

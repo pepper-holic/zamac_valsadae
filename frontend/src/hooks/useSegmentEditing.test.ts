@@ -4,19 +4,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MediaItem, Project, Segment } from '../api/types'
 import { useSegmentEditing } from './useSegmentEditing'
 
-const { deleteSegment, findReplaceSegments, mergeSegments, splitSegment, undoItem, redoItem, updateSegment } =
-  vi.hoisted(() => ({
-    deleteSegment: vi.fn(),
-    findReplaceSegments: vi.fn(),
-    mergeSegments: vi.fn(),
-    splitSegment: vi.fn(),
-    undoItem: vi.fn(),
-    redoItem: vi.fn(),
-    updateSegment: vi.fn(),
-  }))
+const {
+  bulkDeleteSegments,
+  bulkUpdateSegments,
+  findReplaceSegments,
+  mergeSegments,
+  splitSegment,
+  undoItem,
+  redoItem,
+  updateSegment,
+} = vi.hoisted(() => ({
+  bulkDeleteSegments: vi.fn(),
+  bulkUpdateSegments: vi.fn(),
+  findReplaceSegments: vi.fn(),
+  mergeSegments: vi.fn(),
+  splitSegment: vi.fn(),
+  undoItem: vi.fn(),
+  redoItem: vi.fn(),
+  updateSegment: vi.fn(),
+}))
 
 vi.mock('../api/client', () => ({
-  deleteSegment,
+  bulkDeleteSegments,
+  bulkUpdateSegments,
   findReplaceSegments,
   mergeSegments,
   splitSegment,
@@ -135,8 +145,8 @@ describe('useSegmentEditing', () => {
     expect(result.current.selectedSegmentId).toBe('a')
   })
 
-  it('handleBulkDelete calls the API for every id and removes them from state', async () => {
-    deleteSegment.mockResolvedValue(undefined)
+  it('handleBulkDelete sends one request for the whole batch and removes them from state', async () => {
+    bulkDeleteSegments.mockResolvedValue([makeSegment({ id: 'b' })])
     const item = makeItem([makeSegment({ id: 'a' }), makeSegment({ id: 'b' }), makeSegment({ id: 'c' })])
     const project = makeProject(item)
     const { result } = renderHook(() => useHarness(project, null))
@@ -145,8 +155,8 @@ describe('useSegmentEditing', () => {
       await result.current.handleBulkDelete(['a', 'c'])
     })
 
-    expect(deleteSegment).toHaveBeenCalledWith('proj-1', 'item-1', 'a')
-    expect(deleteSegment).toHaveBeenCalledWith('proj-1', 'item-1', 'c')
+    expect(bulkDeleteSegments).toHaveBeenCalledWith('proj-1', 'item-1', ['a', 'c'])
+    expect(bulkDeleteSegments).toHaveBeenCalledTimes(1)
     expect(result.current.project?.items[0].segments.map((s) => s.id)).toEqual(['b'])
   })
 
