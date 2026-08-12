@@ -10,11 +10,18 @@
 - `POST /v1/chat/completions` — Supabase JWT(Authorization: Bearer ...) 검증 후 서버가 보관한
   OpenAI 키로 실제 OpenAI를 대신 호출해 응답을 그대로 돌려줌
 
-## 현재 상태 (2026-08-12)
+## 현재 상태 (2026-08-13)
 
-Supabase 프로젝트 생성 완료, `SUPABASE_JWT_SECRET` 설정 완료 — JWT 검증까지 실제로 동작
-확인됨(유효한 서명의 토큰으로 호출하면 인증을 통과하고 다음 단계인 OpenAI 호출까지 감).
-남은 건 `OPENAI_API_KEY` 뿐 — 없는 동안은 `/v1/chat/completions`가 503을 반환한다.
+**End-to-end 동작 확인 완료.** Supabase JWT 검증 → Gemini(무료 티어, 결제 계정 없는 프로젝트)
+번역 호출까지 실제로 성공(`"Hello, how are you?"` → `"안녕하세요?"`). 지금 서버는 OpenAI가
+아니라 **Gemini의 OpenAI 호환 엔드포인트**를 가리키도록 설정돼 있다 — `OPENAI_MODEL_OVERRIDE`
+환경변수로 클라이언트가 보내는 `gpt-4o-mini`를 서버가 `gemini-2.5-flash`로 바꿔치기한다
+(`app/api/chat.py`). 나중에 진짜 OpenAI로 바꾸려면 `.env`의 `OPENAI_API_KEY`/`OPENAI_BASE_URL`을
+바꾸고 `OPENAI_MODEL_OVERRIDE`를 비우면 된다(로컬 앱이 원래 요청하는 `gpt-4o-mini`가 그대로
+전달됨).
+
+남은 건 **로컬 데스크톱 앱을 이 서버에 연결하는 것뿐** — 다만 앱에 로그인 화면이 없어서
+`TRANSLATION_API_KEY`에 넣을 사용자 JWT를 아직 발급받을 방법이 없다(#45 후속 작업 필요).
 
 ## 배포 (오라클 클라우드 VM, 168.110.107.78)
 
@@ -33,9 +40,11 @@ nginx: 80(→443 예정) → 127.0.0.1:8000 리버스 프록시
    전 자동 갱신 설정됨)
 3. ~~Supabase 프로젝트 생성 후 `SUPABASE_JWT_SECRET` 설정~~ 완료 (2026-08-12) — HS256 서명
    토큰으로 실제 검증 통과 확인됨(`sub`가 곧 사용자 id)
-4. OpenAI API 키 발급 후 `OPENAI_API_KEY`를 `/opt/relay/.env`에 채우고
-   `sudo systemctl restart relay` — 이것만 하면 end-to-end 완성
-5. `curl https://168-110-107-78.nip.io/healthz` 로 확인 (지금도 200 OK)
+4. ~~AI 제공자 연결~~ 완료 (2026-08-13) — 무료 Gemini(`gen-lang-client-...` 프로젝트, 결제 계정
+   없음)로 `/v1/chat/completions` end-to-end 성공 확인
+5. **다음 남은 것**: 데스크톱 앱에 로그인 UI가 없어서 `TRANSLATION_API_KEY`에 넣을 사용자 JWT를
+   발급받을 방법이 없음 — Supabase Auth 기반 로그인 화면(회원가입/로그인, 세션 토큰 저장)을
+   `frontend/`에 추가해야 실제 사용자가 이 서버를 쓸 수 있음 (로드맵 #45 후속)
 
 ## 같은 VM에 호스팅 중인 다른 것: `website/` (로드맵 #42)
 
