@@ -88,6 +88,11 @@ def main() -> None:
     _ensure_pywebview_installed()
     import webview
 
+    # pywebview cancels every download by default (webview.settings
+    # ALLOW_DOWNLOADS=False) - without this, the export/render "download"
+    # links and buttons throughout the app silently do nothing.
+    webview.settings['ALLOW_DOWNLOADS'] = True
+
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()
 

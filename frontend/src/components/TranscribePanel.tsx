@@ -28,6 +28,7 @@ const MODEL_NOTES: Record<string, string> = {
 export function TranscribePanel({ project, item, onStarted }: Props) {
   const [model, setModel] = useState(item.whisper_model ?? 'small')
   const [diarize, setDiarize] = useState(false)
+  const [multilingual, setMultilingual] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [whisperCacheStatus, setWhisperCacheStatus] = useState<Record<string, boolean>>({})
 
@@ -52,7 +53,7 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
   async function handleTranscribe() {
     setError(null)
     try {
-      const updated = await transcribeItem(project.id, item.id, model, diarize)
+      const updated = await transcribeItem(project.id, item.id, model, diarize, multilingual)
       onStarted(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -101,6 +102,18 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
             onChange={(event) => setDiarize(event.target.checked)}
           />
           화자 분리
+        </label>
+        <label
+          className="checkbox-label"
+          data-tip="한 영상 안에서 언어가 섞여 있을 때(예: 한국어↔영어 전환) 약 30초 구간마다 언어를 다시 감지합니다. 기본값은 파일 전체에 대해 언어를 한 번만 감지합니다."
+        >
+          <input
+            type="checkbox"
+            checked={multilingual}
+            disabled={isBusy(item.status)}
+            onChange={(event) => setMultilingual(event.target.checked)}
+          />
+          다국어 혼합
         </label>
         <button
           type="button"

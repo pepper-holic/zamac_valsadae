@@ -105,6 +105,7 @@ class RenderRequest(BaseModel):
 class TranscribeRequest(BaseModel):
     model: str = "small"
     diarize: bool = False
+    multilingual: bool = False
 
 
 class TranslateRequest(BaseModel):

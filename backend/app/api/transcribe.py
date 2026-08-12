@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def _run_transcription(
-    project_id: str, item_id: str, model_size: str, diarize: bool, store: ProjectStore
+    project_id: str,
+    item_id: str,
+    model_size: str,
+    diarize: bool,
+    multilingual: bool,
+    store: ProjectStore,
 ) -> None:
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
@@ -27,6 +32,7 @@ def _run_transcription(
             on_progress=make_progress_reporter(project, item, store),
             on_stage=make_stage_reporter(project, item, store),
             should_cancel=lambda: cancellation.is_cancelled(item_id),
+            multilingual=multilingual,
         )
         if diarize:
             hf_token = get_settings().hf_token
@@ -92,6 +98,12 @@ async def transcribe_item(
     store.save(project)
 
     background_tasks.add_task(
-        _run_transcription, project_id, item_id, request.model, request.diarize, store
+        _run_transcription,
+        project_id,
+        item_id,
+        request.model,
+        request.diarize,
+        request.multilingual,
+        store,
     )
     return item

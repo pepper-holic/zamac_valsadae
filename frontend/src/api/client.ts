@@ -78,13 +78,14 @@ export async function transcribeItem(
   itemId: string,
   model: string,
   diarize: boolean = false,
+  multilingual: boolean = false,
 ): Promise<MediaItem> {
   const response = await fetch(
     `${API_BASE}/projects/${projectId}/items/${itemId}/transcribe`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, diarize }),
+      body: JSON.stringify({ model, diarize, multilingual }),
     },
   )
   return parseOrThrow<MediaItem>(response)

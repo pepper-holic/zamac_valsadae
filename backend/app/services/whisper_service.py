@@ -109,19 +109,29 @@ def _download_model_with_progress(
 ) -> None:
     """Downloads the CT2 whisper checkpoint, reporting real byte-level progress.
 
-    faster_whisper.utils.download_model() wraps huggingface_hub.snapshot_download
-    but hardcodes a no-op tqdm_class, so there is no way to observe progress
-    through it. This calls snapshot_download the same way but with our own
-    tqdm_class, which lets on_progress track actual bytes downloaded instead
-    of the indeterminate spinner the caller would otherwise be stuck with.
+    faster_whisper.utils.download_model() wraps huggingface_hub.snapshot_download,
+    which hardcodes an internal `_AggregatedTqdm` for the actual per-file byte
+    tracking and only ever hands the caller's tqdm_class the outer "N files"
+    counter (unit="it", not "B") - so a tqdm_class passed to snapshot_download
+    never observes real download bytes, only firing once the whole thing is
+    done. hf_hub_download() does not have that indirection: it hands tqdm_class
+    straight to the per-file byte-progress bar, so downloading each allowed
+    file individually is what actually lets on_progress track real bytes.
     """
     import io
+    from fnmatch import fnmatch
 
     import huggingface_hub
     from faster_whisper.utils import _MODELS
     from tqdm.auto import tqdm
 
     repo_id = _MODELS.get(model_size, model_size)
+    all_files = huggingface_hub.list_repo_files(repo_id)
+    files = [
+        path
+        for path in all_files
+        if any(fnmatch(path, pattern) for pattern in _MODEL_ALLOW_PATTERNS)
+    ]
 
     totals: dict[int, int] = {}
     currents: dict[int, int] = {}
@@ -164,13 +174,13 @@ def _download_model_with_progress(
             totals.pop(id(self), None)
             currents.pop(id(self), None)
 
-    huggingface_hub.snapshot_download(
-        repo_id,
-        local_dir=output_dir,
-        local_dir_use_symlinks=False,
-        allow_patterns=_MODEL_ALLOW_PATTERNS,
-        tqdm_class=_ProgressTqdm,
-    )
+    for path in files:
+        huggingface_hub.hf_hub_download(
+            repo_id,
+            filename=path,
+            local_dir=output_dir,
+            tqdm_class=_ProgressTqdm,
+        )
 
 
 def _get_model(
@@ -205,6 +215,8 @@ def transcribe(
     on_stage: Callable[[str], None] | None = None,
     download_root: Path | None = None,
     should_cancel: CancelCallback | None = None,
+    language: str | None = None,
+    multilingual: bool = False,
 ) -> list[Segment]:
     active_model = model or _get_model(
         model_size, on_stage=on_stage, on_progress=on_progress, download_root=download_root
@@ -219,8 +231,17 @@ def transcribe(
     # vad_filter=True runs faster-whisper's built-in Silero VAD pass before
     # decoding, skipping silent/non-speech stretches instead of wastefully
     # decoding them - speeds up transcription with no extra dependency.
+    # language=None (default) makes faster-whisper detect the language once
+    # from the first 30s and decode the whole file under it - wrong for audio
+    # that switches languages partway through. multilingual=True re-detects
+    # the language for every ~30s window instead; language=<code> forces one
+    # language for the whole file (used to force a specific language pass).
     raw_segments, info = active_model.transcribe(
-        str(media_path), word_timestamps=True, vad_filter=True
+        str(media_path),
+        word_timestamps=True,
+        vad_filter=True,
+        language=language,
+        multilingual=multilingual,
     )
 
     # transcribe() returns a lazy generator - progress must be derived by
