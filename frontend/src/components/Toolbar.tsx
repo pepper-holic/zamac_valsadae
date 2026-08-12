@@ -5,8 +5,8 @@ import { AboutModal } from './AboutModal'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
 
-// TODO: 실제 도메인이 배포되면 website/ 프로젝트의 실제 주소로 교체하세요.
-const WEBSITE_URL = 'https://zamacvalsadae.example'
+// 소유 도메인이 정해지면 이 오라클 VM의 nip.io 임시 주소를 교체하세요.
+const WEBSITE_URL = 'https://site.168-110-107-78.nip.io'
 
 const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
 

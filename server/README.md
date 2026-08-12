@@ -37,6 +37,27 @@ nginx: 80(→443 예정) → 127.0.0.1:8000 리버스 프록시
    서버의 `/opt/relay/.env`에 채우고 `sudo systemctl restart relay`
 4. `curl https://168-110-107-78.nip.io/healthz` 로 확인 (지금도 200 OK)
 
+## 같은 VM에 호스팅 중인 다른 것: `website/` (로드맵 #42)
+
+`website/`(Vite + React SPA)의 빌드 산출물(`website/dist`)도 이 VM에 정적 파일로 같이 올라가
+있다. 배포 절차(수동, 스크립트화 안 됨):
+
+```bash
+cd website && npm run build
+tar -czf /tmp/website-dist.tar.gz -C dist .
+scp -i <key> /tmp/website-dist.tar.gz opc@168.110.107.78:/tmp/
+ssh -i <key> opc@168.110.107.78
+  sudo rm -rf /var/www/website/*
+  sudo tar -xzf /tmp/website-dist.tar.gz -C /var/www/website
+  sudo chown -R nginx:nginx /var/www/website
+  sudo restorecon -Rv /var/www/website
+```
+
+nginx 설정은 `deploy/nginx-website.conf`(SPA라 `try_files $uri /index.html` 필요), 접속 주소는
+`https://site.168-110-107-78.nip.io` (certbot으로 별도 인증서 발급, `168-110-107-78.nip.io`와는
+다른 서브도메인이라 인증서도 따로 필요했음). 소유 도메인이 정해지면 nginx `server_name`과
+`frontend/src/components/Toolbar.tsx`/`AboutModal.tsx`의 `WEBSITE_URL`을 교체.
+
 ## 로컬 개발
 
 ```bash
