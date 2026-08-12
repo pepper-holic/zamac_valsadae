@@ -12,11 +12,9 @@
 
 ## 현재 상태 (2026-08-12)
 
-`https://168-110-107-78.nip.io/healthz` 까지 정상 동작(TLS 포함). 아래 2가지가 없어서
-`/v1/chat/completions`만 아직 동작하지 않는다 (설정 없으면 각각 501/503로 명확히 응답한다):
-
-- `SUPABASE_JWT_SECRET` — Supabase 프로젝트를 아직 안 만들어서 없음
-- `OPENAI_API_KEY` — 아직 발급 전
+Supabase 프로젝트 생성 완료, `SUPABASE_JWT_SECRET` 설정 완료 — JWT 검증까지 실제로 동작
+확인됨(유효한 서명의 토큰으로 호출하면 인증을 통과하고 다음 단계인 OpenAI 호출까지 감).
+남은 건 `OPENAI_API_KEY` 뿐 — 없는 동안은 `/v1/chat/completions`가 503을 반환한다.
 
 ## 배포 (오라클 클라우드 VM, 168.110.107.78)
 
@@ -33,9 +31,11 @@ nginx: 80(→443 예정) → 127.0.0.1:8000 리버스 프록시
 1. ~~오라클 클라우드 콘솔 → VCN → Security List에서 80/443 Ingress 룰 추가~~ 완료 (2026-08-12)
 2. ~~`certbot --nginx`로 TLS 인증서 발급~~ 완료 (2026-08-12, 168-110-107-78.nip.io, 2026-11-10 만료
    전 자동 갱신 설정됨)
-3. Supabase 프로젝트 생성 후 `SUPABASE_JWT_SECRET`을, OpenAI API 키 발급 후 `OPENAI_API_KEY`를
-   서버의 `/opt/relay/.env`에 채우고 `sudo systemctl restart relay`
-4. `curl https://168-110-107-78.nip.io/healthz` 로 확인 (지금도 200 OK)
+3. ~~Supabase 프로젝트 생성 후 `SUPABASE_JWT_SECRET` 설정~~ 완료 (2026-08-12) — HS256 서명
+   토큰으로 실제 검증 통과 확인됨(`sub`가 곧 사용자 id)
+4. OpenAI API 키 발급 후 `OPENAI_API_KEY`를 `/opt/relay/.env`에 채우고
+   `sudo systemctl restart relay` — 이것만 하면 end-to-end 완성
+5. `curl https://168-110-107-78.nip.io/healthz` 로 확인 (지금도 200 OK)
 
 ## 같은 VM에 호스팅 중인 다른 것: `website/` (로드맵 #42)
 
