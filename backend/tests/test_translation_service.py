@@ -327,3 +327,21 @@ def test_get_translator_api_with_key_returns_api_translator():
 def test_get_translator_unknown_engine_raises():
     with pytest.raises(ValueError, match="알 수 없는"):
         get_translator("carrier-pigeon", Settings(translation_api_key=None))
+
+
+def test_get_translator_api_with_session_token_ignores_missing_static_key():
+    settings = Settings(translation_api_key=None, hosted_relay_base_url="https://relay.example/v1")
+
+    translator = get_translator("api", settings, session_token="user-jwt")
+
+    assert translator.__class__.__name__ == "ApiTranslator"
+    assert translator._api_key == "user-jwt"
+    assert translator._base_url == "https://relay.example/v1"
+
+
+def test_get_translator_api_prefers_session_token_over_static_key():
+    settings = Settings(translation_api_key="sk-static")
+
+    translator = get_translator("api", settings, session_token="user-jwt")
+
+    assert translator._api_key == "user-jwt"

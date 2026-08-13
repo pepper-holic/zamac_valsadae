@@ -1,5 +1,6 @@
 export type ProjectStatus =
   | 'uploaded'
+  | 'queued'
   | 'transcribing'
   | 'transcribed'
   | 'translating'
@@ -104,6 +105,11 @@ export interface UndoRedoResult {
   segments: Segment[]
   can_undo: boolean
   can_redo: boolean
+}
+
+export interface AuthStatus {
+  logged_in: boolean
+  email: string | null
 }
 
 export const WHISPER_MODELS = [

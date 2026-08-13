@@ -456,6 +456,44 @@ def test_translate_fills_translation_field(client, monkeypatch):
     assert item["segments"][0]["translation"] == "[ko->en] 안녕"
 
 
+def test_translate_passes_logged_in_session_token_to_get_translator(client, monkeypatch):
+    from app.services import auth_state
+
+    ctx = _create_project_with_item(client)
+    monkeypatch.setattr(
+        "app.services.transcription_queue.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="안녕")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    class FakeTranslator:
+        def translate(self, texts, direction):
+            return [f"[{direction}] {t}" for t in texts]
+
+    captured = {}
+
+    def fake_get_translator(*args, **kwargs):
+        captured["session_token"] = kwargs.get("session_token")
+        return FakeTranslator()
+
+    monkeypatch.setattr("app.api.translate.translation_service.get_translator", fake_get_translator)
+
+    auth_state.set_session(access_token="user-jwt", email="a@b.com")
+    try:
+        response = client.post(
+            f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
+            json={"direction": "ko->en", "engine": "api"},
+        )
+    finally:
+        auth_state.clear_session()
+
+    assert response.status_code == 200
+    assert captured["session_token"] == "user-jwt"
+
+
 def _segments_url(ctx: dict, suffix: str = "") -> str:
     return f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/segments{suffix}"
 

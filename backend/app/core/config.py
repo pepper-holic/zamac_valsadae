@@ -71,6 +71,11 @@ class Settings:
     translation_api_key: str | None = os.environ.get("TRANSLATION_API_KEY")
     translation_api_base_url: str | None = os.environ.get("TRANSLATION_API_BASE_URL")
     hf_token: str | None = os.environ.get("HF_TOKEN")
+    # Base URL for the hosted relay (server/) that logged-in users are routed
+    # through automatically - see translation_service.get_translator().
+    hosted_relay_base_url: str = os.environ.get(
+        "HOSTED_RELAY_BASE_URL", "https://168-110-107-78.nip.io/v1"
+    )
 
 
 def get_settings() -> Settings:

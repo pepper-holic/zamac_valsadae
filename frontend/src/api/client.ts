@@ -1,4 +1,5 @@
 import type {
+  AuthStatus,
   ExportFormat,
   MediaItem,
   ModelStatus,
@@ -349,4 +350,23 @@ export async function importReviewPackage(
     body: formData,
   })
   return parseOrThrow<ReviewImportResult>(response)
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  const response = await fetch(`${API_BASE}/auth/session`)
+  return parseOrThrow<AuthStatus>(response)
+}
+
+export async function postAuthSession(accessToken: string, email: string): Promise<AuthStatus> {
+  const response = await fetch(`${API_BASE}/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: accessToken, email }),
+  })
+  return parseOrThrow<AuthStatus>(response)
+}
+
+export async function clearAuthSession(): Promise<AuthStatus> {
+  const response = await fetch(`${API_BASE}/auth/session`, { method: 'DELETE' })
+  return parseOrThrow<AuthStatus>(response)
 }

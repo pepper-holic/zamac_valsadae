@@ -198,3 +198,13 @@ class ReviewImportResult(BaseModel):
 class ModelStatus(BaseModel):
     whisper: dict[str, bool] = Field(default_factory=dict)
     translation: dict[str, bool] = Field(default_factory=dict)
+
+
+class AuthSessionRequest(BaseModel):
+    access_token: str
+    email: str
+
+
+class AuthStatus(BaseModel):
+    logged_in: bool
+    email: str | None = None

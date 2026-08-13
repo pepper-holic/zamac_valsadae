@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from app.api.deps import get_store
 from app.core.config import get_settings
 from app.models.schemas import MediaItem, TranslateRequest
-from app.services import cancellation, readability_service, translation_service
+from app.services import auth_state, cancellation, readability_service, translation_service
 from app.services.progress_reporter import make_progress_reporter, make_stage_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 
@@ -20,8 +20,12 @@ def _run_translation(
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
     try:
+        session = auth_state.get_session()
         translator = translation_service.get_translator(
-            request.engine, get_settings(), on_stage=make_stage_reporter(project, item, store)
+            request.engine,
+            get_settings(),
+            on_stage=make_stage_reporter(project, item, store),
+            session_token=session.access_token if session else None,
         )
         # 용어집은 프로젝트(파일 모음) 전체에서 공유하지만, 번역 메모리는 같은
         # 프로젝트 안에서 반복 번역되는 문장을 재사용하기 위한 것이라 방향별로

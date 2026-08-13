@@ -188,13 +188,21 @@ def _parse_numbered_lines(content: str, expected_count: int) -> list[str]:
 
 
 def get_translator(
-    engine: str, settings: Settings, on_stage: Callable[[str], None] | None = None
+    engine: str,
+    settings: Settings,
+    on_stage: Callable[[str], None] | None = None,
+    session_token: str | None = None,
 ) -> Translator:
     if engine == "local":
         return LocalTranslator(cache_dir=settings.ct2_model_cache_dir, on_stage=on_stage)
     if engine == "api":
+        # A logged-in session routes through our hosted relay (which holds
+        # its own provider key server-side) instead of requiring the user to
+        # supply their own TRANSLATION_API_KEY.
+        if session_token:
+            return ApiTranslator(api_key=session_token, base_url=settings.hosted_relay_base_url)
         if not settings.translation_api_key:
-            raise ValueError("API 번역을 사용하려면 TRANSLATION_API_KEY 설정이 필요합니다.")
+            raise ValueError("API 번역을 사용하려면 로그인하거나 TRANSLATION_API_KEY 설정이 필요합니다.")
         base_url = settings.translation_api_base_url or "https://api.openai.com/v1"
         return ApiTranslator(api_key=settings.translation_api_key, base_url=base_url)
     raise ValueError(f"알 수 없는 번역 엔진: {engine}")

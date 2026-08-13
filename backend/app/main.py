@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import export, models, projects, review, segments, transcribe, translate
+from app.api import auth, export, models, projects, review, segments, transcribe, translate
 from app.api.deps import get_store
 from app.services.project_store import ProjectStore
 
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     async def _recover_interrupted_projects_on_startup() -> None:
         recover_interrupted_projects(get_store())
 
+    app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(models.router)
     app.include_router(transcribe.router)

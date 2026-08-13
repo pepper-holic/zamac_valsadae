@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MediaItem, Project } from '../api/types'
 import { deleteProject } from '../api/client'
+import { useAuth } from '../hooks/useAuth'
 import { AboutModal } from './AboutModal'
+import { AuthModal } from './AuthModal'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
 
@@ -64,6 +66,8 @@ export function Toolbar({
   const [isUploading, setIsUploading] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
+  const [isAuthOpen, setIsAuthOpen] = useState(false)
+  const { email, isAuthConfigured, signIn, signUp, signOut } = useAuth()
   const [isDeletingProject, setIsDeletingProject] = useState(false)
   const [isDeletingItem, setIsDeletingItem] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -302,6 +306,30 @@ export function Toolbar({
         </div>
       )}
 
+      {isAuthConfigured && (
+        <div className="toolbar-auth-group">
+          {email ? (
+            <>
+              <span className="hint-text" data-tip={email}>
+                {email.split('@')[0]}
+              </span>
+              <button type="button" className="toolbar-ghost-button" onClick={() => void signOut()}>
+                로그아웃
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="toolbar-ghost-button toolbar-primary-ghost"
+              onClick={() => setIsAuthOpen(true)}
+              data-tip="로그인하면 서버 제공 번역 엔진을 별도 API 키 없이 쓸 수 있습니다."
+            >
+              로그인
+            </button>
+          )}
+        </div>
+      )}
+
       <a
         className="toolbar-icon-button"
         href={WEBSITE_URL}
@@ -351,6 +379,9 @@ export function Toolbar({
 
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
       {isAboutOpen && <AboutModal onClose={() => setIsAboutOpen(false)} />}
+      {isAuthOpen && (
+        <AuthModal onClose={() => setIsAuthOpen(false)} signIn={signIn} signUp={signUp} />
+      )}
     </header>
   )
 }
