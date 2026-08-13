@@ -701,7 +701,7 @@ macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우�
 | 42 | `website/` 실제 배포 | 오라클 클라우드 VM(44/45번과 같은 서버)에 nginx 정적 호스팅으로 배포 완료(2026-08-12) — `https://site.168-110-107-78.nip.io`, TLS 포함. `Toolbar.tsx`/`AboutModal.tsx`의 `WEBSITE_URL`을 이 주소로 교체 완료. 소유 도메인이 정해지면 그걸로 재교체 필요 | [x] 완료 (2026-08-12, 임시 도메인) |
 | 43 | `docs/pages/*.md`와 `website/src/content/`의 중복 정리 | `website/src/content/`가 유일한 정본이 되도록 `docs/pages/` 디렉터리를 통째로 삭제(2026-08-10). `learn.md`는 `HelpModal`과 중복이라 별도 이관 없이 삭제, 나머지 10개 페이지는 전부 `website/src/content/legalPagesLegal.tsx` / `legalPagesBiz.tsx`로 이미 이관되어 있었음 | [x] 완료 (2026-08-10) |
 | 44 | 번역/AI 검수 서버 API 연동 | 오라클 VM 릴레이(`https://168-110-107-78.nip.io`)에서 Supabase 인증 → Gemini(무료) 번역 호출까지 end-to-end 성공 확인(2026-08-13) — 아래 상세 참고. AI 검수 자동화(수동 파일 왕복 → 서버 자동 호출)는 후속 라운드로 분리, 아직 미착수 | [~] 서버 end-to-end 완료, 앱 로그인 UI 대기 (2026-08-13) |
-| 45 | 로그인/계정 시스템 실제 구현 | Supabase Auth 프로젝트 생성 + JWT 검증 실제 동작 확인 완료(2026-08-12). 데스크톱 앱의 실제 로그인 UI(회원가입/로그인 화면, 세션 토큰 저장 — Toolbar/App.tsx)가 없어서 사용자가 `TRANSLATION_API_KEY`에 넣을 JWT를 발급받을 방법이 아직 없음 — 다음 착수 대상 | [~] 서버 측 인증 완료, 앱 로그인 UI 미착수 (2026-08-13) |
+| 45 | 로그인/계정 시스템 실제 구현 | 데스크톱 앱에 이메일+비밀번호 로그인 UI 추가 완료(2026-08-13) — `Toolbar.tsx`에 로그인/로그아웃, `AuthModal.tsx`(회원가입 토글 포함), `useAuth.ts`(Supabase 세션 ↔ 백엔드 동기화). 백엔드는 `POST/GET/DELETE /auth/session`(인메모리, `auth_state.py`)로 세션 보관, 로그인 상태면 번역 시 자동으로 릴레이 서버를 씀(`get_translator`의 `session_token`). 구글 소셜 로그인은 후속 | [x] 완료 (2026-08-13) |
 | 46 | 설치 프로그램 코드 서명 (#29) | 배포 규모 확정 전까지 보류, 유료 인증서 필요 | [ ] 보류 |
 | 47 | 사업자 정보·가격 정책 실제 값 확정 | `website/src/content/`와 `docs/pages/`에 흩어진 더미 값(사업자등록번호, 요금제 숫자 등)을 사업자 등록·요금제 설계 완료 후 일괄 교체 | [ ] 사업 결정 대기 |
 | 48 | 프론트엔드 테스트 커버리지 확대 | `Timeline`(5개), `useSegmentEditing`(6개), `useProjectWorkspace`(6개) 테스트 추가 완료 (2026-08-10). `Toolbar`(8개), `SubtitleStylePanel`(6개) 테스트 추가 완료 (2026-08-12) — 총 8개 파일 55개 테스트 통과. 남은 후보: `ExportPanel`, `ReviewPanel` | [x] 2차 완료 (2026-08-12) |
@@ -745,11 +745,19 @@ macOS/Linux 빌드처럼 실제로 존재하지 않는 것은 더미로 채우�
 `openai_model_override`). 실제 번역 요청(`"Hello, how are you?"` → `"안녕하세요?"`)까지 성공
 확인 — Supabase 인증 → Gemini 번역까지 전체 체인이 실제로 동작한다.
 
-**남은 것**: 로컬 데스크톱 앱에 로그인 화면이 없어서, `TRANSLATION_API_KEY`에 넣을 "사용자
-JWT"를 발급받을 방법이 없음 — Supabase Auth 기반 로그인 UI(회원가입/로그인, 세션 토큰 저장)를
-`frontend/`에 추가해야 실사용자가 이 서버를 쓸 수 있음. 나중에 OpenAI로 바꾸고 싶으면
-`.env`의 `OPENAI_API_KEY`/`OPENAI_BASE_URL`을 바꾸고 `OPENAI_MODEL_OVERRIDE`를 비우면 됨(코드
-변경 불필요).
+**로그인 UI 완료** (2026-08-13): `frontend/src/components/AuthModal.tsx` + `useAuth.ts`로
+이메일/비밀번호 로그인·회원가입 추가(`@supabase/supabase-js`), `Toolbar.tsx`에 로그인 상태
+표시. 로그인 성공 시 세션의 `access_token`을 백엔드 `POST /auth/session`으로 전달해
+`backend/app/services/auth_state.py`(인메모리, 프로세스 하나=사용자 하나)에 보관. 번역 엔진을
+"api"로 놓고 로그인돼 있으면 `translation_service.get_translator()`가 그 토큰과
+`hosted_relay_base_url`(오라클 릴레이 주소)로 자동 전환 — 사용자가 `TRANSLATION_API_KEY`를
+직접 설정할 필요가 없어짐. 로그인 안 한 상태/`.env` 미설정 상태에서는 기존 로컬 엔진·수동
+API 키 흐름이 그대로 동작(로그인 UI는 Supabase 값이 없으면 조용히 숨겨짐).
+
+**남은 것**: 실제 사용자 계정으로 앱을 켜서 로그인 → 번역까지 수동 확인(이번 라운드는
+자동화 테스트로만 검증), 구글 소셜 로그인, OpenAI 실제 키로 교체(`server/.env`의
+`OPENAI_API_KEY`/`OPENAI_BASE_URL` 변경 + `OPENAI_MODEL_OVERRIDE` 비우기 — 코드 변경 불필요),
+AI 검수 자동화(#44 후반부, 여전히 범위 밖).
 
 **이번에 의도적으로 범위 밖에 둔 것**:
 - AI 검수 자동 서버 호출 전환(`backend/app/api/review.py`, `ReviewPanel.tsx`) — 같은 릴레이
