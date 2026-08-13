@@ -23,6 +23,25 @@ def client(store):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def run_transcription_queue_synchronously(monkeypatch):
+    """Transcription now runs on a background queue worker thread (see
+    app.services.transcription_queue) instead of finishing before the POST
+    /transcribe response, as it used to with FastAPI BackgroundTasks. Most
+    tests only care about the resulting item state, so run jobs inline on
+    the calling thread here to keep them synchronous. Queue-specific
+    ordering behavior is covered separately in test_transcription_queue.py.
+    """
+    from app.services import transcription_queue
+
+    def _run_inline(job, store):
+        transcription_queue._process(job, store)
+
+    # transcribe.py imports `enqueue` by name, so the patch target must be
+    # the imported reference in that module, not the defining module.
+    monkeypatch.setattr("app.api.transcribe.enqueue", _run_inline)
+
+
 def _create_project(client) -> dict:
     response = client.post("/projects", json={})
     assert response.status_code == 200
@@ -233,7 +252,7 @@ def test_transcribe_runs_background_task_and_updates_segments(client, monkeypatc
 
     fake_segments = [Segment(id="s1", start=0.0, end=1.0, text="hello")]
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe", lambda *a, **k: fake_segments
+        "app.services.transcription_queue.whisper_service.transcribe", lambda *a, **k: fake_segments
     )
 
     response = client.post(
@@ -259,7 +278,7 @@ def test_transcribe_reports_final_progress_and_calls_on_progress(client, monkeyp
             on_progress(1.0)
         return fake_segments
 
-    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", fake_transcribe)
 
     client.post(
         f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
@@ -288,7 +307,7 @@ def test_transcribe_marks_error_status_on_failure(client, monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("model exploded")
 
-    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", _boom)
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", _boom)
 
     client.post(
         f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
@@ -308,7 +327,7 @@ def test_transcribe_reports_downloading_model_stage(client, monkeypatch):
             on_stage("downloading_model")
         return [Segment(id="s1", start=0.0, end=1.0, text="hello")]
 
-    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", fake_transcribe)
 
     client.post(
         f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
@@ -334,7 +353,7 @@ def test_transcribe_stopped_via_should_cancel_marks_error_with_cancel_message(cl
             raise TranscriptionCancelled("취소")
         return []
 
-    monkeypatch.setattr("app.api.transcribe.whisper_service.transcribe", fake_transcribe)
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", fake_transcribe)
 
     client.post(
         f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
@@ -410,7 +429,7 @@ def test_translate_requires_existing_segments(client):
 def test_translate_fills_translation_field(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="안녕")],
     )
     client.post(
@@ -444,7 +463,7 @@ def _segments_url(ctx: dict, suffix: str = "") -> str:
 def test_update_segment_patches_text(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
     )
     client.post(
@@ -461,7 +480,7 @@ def test_update_segment_patches_text(client, monkeypatch):
 def test_update_segment_clears_words_when_text_changes(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(
                 id="s1",
@@ -486,7 +505,7 @@ def test_update_segment_clears_words_when_text_changes(client, monkeypatch):
 def test_update_segment_keeps_words_when_text_unchanged(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(
                 id="s1",
@@ -519,7 +538,7 @@ def test_update_missing_segment_returns_404(client):
 def test_update_segment_rejects_start_after_end(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=1.0, end=2.0, text="원문")],
     )
     client.post(
@@ -535,7 +554,7 @@ def test_update_segment_rejects_start_after_end(client, monkeypatch):
 def test_delete_segment_removes_it_from_item(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="keep"),
             Segment(id="s2", start=1.0, end=2.0, text="delete me"),
@@ -564,7 +583,7 @@ def test_delete_missing_segment_returns_404(client):
 def test_split_segment_replaces_it_with_two_segments(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=10.0, text="one two three four")],
     )
     client.post(
@@ -595,7 +614,7 @@ def test_split_segment_missing_returns_404(client):
 def test_split_segment_invalid_point_returns_400(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=10.0, text="one two")],
     )
     client.post(
@@ -611,7 +630,7 @@ def test_split_segment_invalid_point_returns_400(client, monkeypatch):
 def test_merge_segments_combines_them_into_one(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="hello"),
             Segment(id="s2", start=1.0, end=2.0, text="world"),
@@ -637,7 +656,7 @@ def test_merge_segments_combines_them_into_one(client, monkeypatch):
 def test_merge_segments_missing_id_returns_404(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="hello")],
     )
     client.post(
@@ -655,7 +674,7 @@ def test_merge_segments_missing_id_returns_404(client, monkeypatch):
 def test_find_replace_updates_matching_segments(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="hello world"),
             Segment(id="s2", start=1.0, end=2.0, text="goodbye"),
@@ -679,7 +698,7 @@ def test_find_replace_updates_matching_segments(client, monkeypatch):
 def test_detect_fillers_returns_filler_segment_ids_without_deleting(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="음"),
             Segment(id="s2", start=1.0, end=2.0, text="안녕하세요"),
@@ -713,7 +732,7 @@ def test_detect_fillers_missing_item_returns_404(client):
 def test_bulk_update_applies_all_entries_in_one_request(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="one"),
             Segment(id="s2", start=1.0, end=2.0, text="two"),
@@ -745,7 +764,7 @@ def test_bulk_update_applies_all_entries_in_one_request(client, monkeypatch):
 def test_bulk_update_missing_id_returns_404_and_changes_nothing(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="one")],
     )
     client.post(
@@ -766,7 +785,7 @@ def test_bulk_update_missing_id_returns_404_and_changes_nothing(client, monkeypa
 def test_bulk_delete_removes_all_given_ids_in_one_request(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="one"),
             Segment(id="s2", start=1.0, end=2.0, text="two"),
@@ -790,7 +809,7 @@ def test_bulk_delete_removes_all_given_ids_in_one_request(client, monkeypatch):
 def test_undo_fully_reverts_a_bulk_delete_in_a_single_step(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="one"),
             Segment(id="s2", start=1.0, end=2.0, text="two"),
@@ -816,7 +835,7 @@ def test_undo_fully_reverts_a_bulk_delete_in_a_single_step(client, monkeypatch):
 def test_undo_restores_segment_text_before_last_update(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
     )
     client.post(
@@ -839,7 +858,7 @@ def test_undo_restores_segment_text_before_last_update(client, monkeypatch):
 def test_redo_reapplies_undone_change(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
     )
     client.post(
@@ -876,7 +895,7 @@ def test_redo_without_history_returns_400(client):
 def test_new_edit_after_undo_clears_redo_stack(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="원문")],
     )
     client.post(
@@ -894,7 +913,7 @@ def test_new_edit_after_undo_clears_redo_stack(client, monkeypatch):
 
 def _transcribe_one_segment(client, ctx, monkeypatch, text: str = "안녕하세요") -> None:
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text=text)],
     )
     client.post(
@@ -930,7 +949,7 @@ def test_render_starts_and_marks_item_rendered(client, monkeypatch):
 def test_render_with_cut_deleted_passes_cut_list_and_uses_kept_duration(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="one"),
             Segment(id="s2", start=3.0, end=5.0, text="two"),
@@ -965,7 +984,7 @@ def test_render_with_cut_deleted_passes_cut_list_and_uses_kept_duration(client, 
 def test_render_without_cut_deleted_uses_full_duration_and_no_cut_list(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [
             Segment(id="s1", start=0.0, end=1.0, text="one"),
             Segment(id="s2", start=3.0, end=5.0, text="two"),
@@ -1057,7 +1076,7 @@ def test_download_rendered_video_missing_returns_404(client):
 def test_export_srt(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요")],
     )
     client.post(
@@ -1077,7 +1096,7 @@ def test_export_srt(client, monkeypatch):
 def test_review_package_download(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요", translation="Hello")],
     )
     client.post(
@@ -1096,7 +1115,7 @@ def test_review_package_download(client, monkeypatch):
 def test_review_import_returns_diff(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(
-        "app.api.transcribe.whisper_service.transcribe",
+        "app.services.transcription_queue.whisper_service.transcribe",
         lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요", translation="Hello")],
     )
     client.post(

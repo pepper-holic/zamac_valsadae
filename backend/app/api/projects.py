@@ -142,11 +142,27 @@ async def cancel_item_operation(
     project_id: str, item_id: str, store: ProjectStore = Depends(get_store)
 ) -> MediaItem:
     try:
-        item = store.get_item(project_id, item_id)
+        project = store.get(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
-    except ItemNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.") from exc
+    item = next((i for i in project.items if i.id == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+    if item.status == "queued":
+        # Not picked up by the worker yet - dropping it back to "uploaded" is
+        # enough, the worker skips any job whose item is no longer "queued".
+        # Routed through store.update() so this can't race with the queue
+        # worker saving a sibling item's progress at the same time.
+        def revert_to_uploaded(proj: Project) -> None:
+            target = next((i for i in proj.items if i.id == item_id), None)
+            if target is not None:
+                target.status = "uploaded"
+                target.error = None
+
+        updated_project = store.update(project_id, revert_to_uploaded)
+        return next(i for i in updated_project.items if i.id == item_id)
+
     if item.status not in _CANCELLABLE_STATUSES:
         raise HTTPException(status_code=400, detail="현재 진행 중인 작업이 없습니다.")
     cancellation.request_cancel(item_id)

@@ -14,6 +14,7 @@ type Props = {
 }
 
 const STATUS_LABEL: Partial<Record<ProjectStatus, string>> = {
+  queued: '대기 중',
   transcribing: '전사 중',
   translating: '번역 중',
   rendering: '렌더링 중',

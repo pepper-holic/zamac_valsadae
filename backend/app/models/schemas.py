@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 ProjectStatus = Literal[
     "uploaded",
+    "queued",
     "transcribing",
     "transcribed",
     "translating",

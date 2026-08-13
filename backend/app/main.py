@@ -10,7 +10,7 @@ from app.services.project_store import ProjectStore
 
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
-_INTERRUPTED_STATUSES = ("transcribing", "translating", "rendering")
+_INTERRUPTED_STATUSES = ("queued", "transcribing", "translating", "rendering")
 _INTERRUPTED_MESSAGE = "서버가 재시작되어 작업이 중단되었습니다. 다시 시도해주세요."
 
 

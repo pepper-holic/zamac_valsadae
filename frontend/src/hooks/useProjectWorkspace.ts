@@ -5,7 +5,7 @@ import type { QueuedTask } from '../components/TaskQueuePanel'
 import { projectLabel, updateItemInProject } from '../utils/projectHelpers'
 
 const POLL_INTERVAL_MS = 1500
-const ACTIVE_STATUSES = new Set<ProjectStatus>(['transcribing', 'translating', 'rendering'])
+const ACTIVE_STATUSES = new Set<ProjectStatus>(['queued', 'transcribing', 'translating', 'rendering'])
 
 export function useProjectWorkspace(onProjectLoaded: () => void) {
   const [projects, setProjects] = useState<Project[]>([])

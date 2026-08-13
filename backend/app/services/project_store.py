@@ -1,6 +1,8 @@
 import json
 import shutil
+import threading
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from pydantic import ValidationError
 
@@ -32,6 +34,10 @@ class ProjectStore:
         # 아이템별 세그먼트 undo/redo 스택 - 프로세스 메모리에만 유지(재시작 시 초기화).
         self._history: dict[str, list[list[Segment]]] = {}
         self._redo: dict[str, list[list[Segment]]] = {}
+        # 프로젝트별 락 - 백그라운드 전사 큐 워커와 API 요청이 같은 project.json을
+        # 동시에 읽고 써서 서로의 변경을 덮어쓰지 않도록 한다 (update() 참고).
+        self._project_locks: dict[str, threading.Lock] = {}
+        self._project_locks_guard = threading.Lock()
 
     def _project_dir(self, project_id: str) -> Path:
         return self._root_dir / project_id
@@ -100,6 +106,26 @@ class ProjectStore:
         metadata_path = self._metadata_path(project.id)
         metadata_path.parent.mkdir(parents=True, exist_ok=True)
         metadata_path.write_text(project.model_dump_json(indent=2), encoding="utf-8")
+
+    def _lock_for(self, project_id: str) -> threading.Lock:
+        with self._project_locks_guard:
+            return self._project_locks.setdefault(project_id, threading.Lock())
+
+    def update(self, project_id: str, mutate: Callable[[Project], None]) -> Project:
+        """Atomically read-modify-write a project under a per-project lock.
+
+        Plain get()-then-save() call sites race when two threads touch the
+        same project around the same time (e.g. a "전사 시작" request and the
+        transcription queue worker updating a sibling item) - whichever saves
+        last silently overwrites the other's change. Routing a mutation
+        through here serializes it against every other update() caller for
+        that project. If `mutate` raises, nothing is saved.
+        """
+        with self._lock_for(project_id):
+            project = self.get(project_id)
+            mutate(project)
+            self.save(project)
+            return project
 
     def delete(self, project_id: str) -> None:
         project_dir = self._project_dir(project_id)

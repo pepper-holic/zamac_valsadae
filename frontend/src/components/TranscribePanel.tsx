@@ -12,7 +12,8 @@ type Props = {
   onStarted: (item: MediaItem) => void
 }
 
-const isBusy = (status: MediaItem['status']) => status === 'transcribing' || status === 'translating'
+const isBusy = (status: MediaItem['status']) =>
+  status === 'queued' || status === 'transcribing' || status === 'translating'
 
 const MODEL_NOTES: Record<string, string> = {
   tiny: '매우 빠름 · 정확도 낮음 — 빠른 테스트용',
@@ -121,10 +122,18 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
           disabled={isBusy(item.status)}
           data-tip="선택한 모델로 음성 인식을 시작합니다."
         >
-          {item.status === 'transcribing' ? '전사 중...' : '전사 시작'}
+          {item.status === 'queued' ? '대기 중...' : item.status === 'transcribing' ? '전사 중...' : '전사 시작'}
         </button>
-        {item.status === 'transcribing' && (
-          <button type="button" onClick={handleCancel} data-tip="진행 중인 전사를 중단합니다.">
+        {(item.status === 'queued' || item.status === 'transcribing') && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            data-tip={
+              item.status === 'queued'
+                ? '큐에서 이 파일을 제거합니다.'
+                : '진행 중인 전사를 중단합니다.'
+            }
+          >
             취소
           </button>
         )}
@@ -135,6 +144,11 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
       )}
       {!isBusy(item.status) && isModelCached && (
         <p className="hint-text">✓ 모델이 이미 다운로드되어 있습니다.</p>
+      )}
+      {item.status === 'queued' && (
+        <p className="hint-text">
+          ⏳ 다른 파일 전사가 끝나면 자동으로 순서대로 시작됩니다. (한 번에 하나씩만 처리)
+        </p>
       )}
       {item.status === 'transcribing' && isDownloadingModel && (
         <div className="progress-block">
