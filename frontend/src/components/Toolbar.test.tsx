@@ -78,6 +78,10 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     onUndo: vi.fn(),
     onRedo: vi.fn(),
     onGoHome: vi.fn(),
+    onReviewImported: vi.fn(),
+    reviewDiffCount: 0,
+    onAcceptAllReviewDiffs: vi.fn().mockResolvedValue(undefined),
+    onRejectAllReviewDiffs: vi.fn(),
     ...overrides,
   }
 }
