@@ -4,12 +4,31 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.models.schemas import Segment, Word
 from app.services.whisper_service import (
     TranscriptionCancelled,
     _assess_transcription_quality,
+    _detect_device,
+    _get_model_on_device,
+    _join_words,
+    _split_long_segment,
+    get_transcribe_device,
     is_model_cached,
     transcribe,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_model_cache():
+    """`_MODEL_CACHE` is module-level global state keyed by "model_size:device"
+    - without resetting it, a fake model cached under model_size="small" by
+    one test would leak into and break every later test using that same
+    size."""
+    from app.services import whisper_service
+
+    whisper_service._MODEL_CACHE.clear()
+    yield
+    whisper_service._MODEL_CACHE.clear()
 
 
 @dataclass
@@ -306,5 +325,276 @@ def test_download_model_with_progress_ignores_non_byte_bars(monkeypatch):
 
     calls = []
     _download_model_with_progress("small", "/fake/output", calls.append)
+
+    assert calls == []
+
+
+def test_transcribe_splits_a_long_segment_at_the_largest_pause():
+    words = [
+        FakeRawWord(word="one", start=0.0, end=1.0),
+        FakeRawWord(word="two", start=1.0, end=2.0),
+        FakeRawWord(word="three", start=2.0, end=3.0),
+        FakeRawWord(word="four", start=5.0, end=6.0),
+        FakeRawWord(word="five", start=6.0, end=7.0),
+        FakeRawWord(word="six", start=7.0, end=10.0),
+    ]
+    fake_model = FakeWhisperModel(
+        [FakeRawSegment(start=0.0, end=10.0, text="one two three four five six", words=words)]
+    )
+
+    segments = transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert len(segments) == 2
+    assert segments[0].text == "one two three"
+    assert segments[0].end == 3.0
+    assert segments[1].text == "four five six"
+    assert segments[1].start == 5.0
+    assert segments[0].id != segments[1].id
+
+
+def test_transcribe_recursively_splits_a_very_long_segment_into_parts_under_the_limit():
+    words = [FakeRawWord(word=f"w{i}", start=float(i), end=float(i + 1)) for i in range(21)]
+    fake_model = FakeWhisperModel(
+        [FakeRawSegment(start=0.0, end=21.0, text=" ".join(w.word for w in words), words=words)]
+    )
+
+    segments = transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert len(segments) >= 3
+    for segment in segments:
+        assert segment.end - segment.start <= 7.0
+
+
+def test_transcribe_leaves_a_long_segment_unsplit_without_word_timestamps():
+    fake_model = FakeWhisperModel(
+        [FakeRawSegment(start=0.0, end=10.0, text="a very long run-on sentence", words=None)]
+    )
+
+    segments = transcribe(Path("video.mp4"), model_size="small", model=fake_model)
+
+    assert len(segments) == 1
+    assert segments[0].end == 10.0
+
+
+def test_split_long_segment_returns_unchanged_when_under_max_duration():
+    segment = Segment(
+        id="x", start=0.0, end=5.0, text="short", words=[Word(text="short", start=0.0, end=5.0)]
+    )
+
+    assert _split_long_segment(segment, max_duration=7.0, min_duration=5 / 6) == [segment]
+
+
+def test_split_long_segment_returns_unchanged_with_fewer_than_two_words():
+    segment = Segment(
+        id="x", start=0.0, end=10.0, text="one", words=[Word(text="one", start=0.0, end=10.0)]
+    )
+
+    assert _split_long_segment(segment, max_duration=7.0, min_duration=5 / 6) == [segment]
+
+
+def test_split_long_segment_skips_a_boundary_that_would_leave_a_sliver():
+    segment = Segment(
+        id="x",
+        start=0.0,
+        end=9.0,
+        text="a b c",
+        words=[
+            Word(text="a", start=0.0, end=0.3),
+            Word(text="b", start=8.0, end=8.5),
+            Word(text="c", start=8.5, end=9.0),
+        ],
+    )
+
+    # Splitting after "a" leaves a 0.3s left half, and splitting after "b"
+    # leaves a 0.5s right half - both under min_duration, so neither is a
+    # valid boundary and the segment stays whole rather than producing a
+    # sliver segment that would just trip the "too short" flag instead.
+    assert _split_long_segment(segment, max_duration=7.0, min_duration=5 / 6) == [segment]
+
+
+def test_join_words_attaches_leading_punctuation_without_a_space():
+    words = [
+        Word(text="Hello", start=0.0, end=1.0),
+        Word(text=",", start=1.0, end=1.0),
+        Word(text="world", start=1.0, end=2.0),
+    ]
+
+    assert _join_words(words) == "Hello, world"
+
+
+def test_detect_device_returns_cuda_when_a_gpu_is_reported(monkeypatch):
+    import ctranslate2
+
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 1)
+
+    assert _detect_device() == "cuda"
+
+
+def test_detect_device_returns_cpu_when_no_gpu_is_reported(monkeypatch):
+    import ctranslate2
+
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 0)
+
+    assert _detect_device() == "cpu"
+
+
+def test_detect_device_returns_cpu_when_detection_raises(monkeypatch):
+    import ctranslate2
+
+    def boom():
+        raise RuntimeError("no CUDA driver")
+
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", boom)
+
+    assert _detect_device() == "cpu"
+
+
+def test_get_model_on_device_caches_separately_per_device(monkeypatch, tmp_path):
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+    calls = []
+
+    def fake_load_model(model_dir, device):
+        calls.append(device)
+        return f"model-on-{device}"
+
+    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+
+    gpu_model = _get_model_on_device("small", "cuda", download_root=tmp_path)
+    cpu_model = _get_model_on_device("small", "cpu", download_root=tmp_path)
+    gpu_model_again = _get_model_on_device("small", "cuda", download_root=tmp_path)
+
+    assert gpu_model == "model-on-cuda"
+    assert cpu_model == "model-on-cpu"
+    assert gpu_model_again == "model-on-cuda"
+    # the second "cuda" request was served from cache, not reloaded
+    assert calls == ["cuda", "cpu"]
+
+
+def test_transcribe_retries_on_cpu_when_gpu_fails_at_runtime(monkeypatch, tmp_path):
+    """Covers a missing cuBLAS/cuDNN DLL - faster-whisper's transcribe() call
+    can succeed at model *construction* but only fail once a kernel actually
+    runs, which happens inside this call, not at _load_model() time."""
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
+    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+
+    class FakeCudaModel:
+        def transcribe(self, audio_path, **kwargs):
+            raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+
+    cpu_model = FakeWhisperModel([FakeRawSegment(start=0.0, end=1.0, text="hello")])
+
+    def fake_load_model(model_dir, device):
+        return FakeCudaModel() if device == "cuda" else cpu_model
+
+    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+
+    segments = transcribe(Path("video.mp4"), model_size="small", download_root=tmp_path)
+
+    assert len(segments) == 1
+    assert segments[0].text == "hello"
+
+
+def test_transcribe_raises_without_retry_when_cpu_itself_fails(monkeypatch, tmp_path):
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cpu")
+    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+
+    class FakeFailingModel:
+        def transcribe(self, audio_path, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(whisper_service, "_load_model", lambda model_dir, device: FakeFailingModel())
+
+    with pytest.raises(RuntimeError, match="boom"):
+        transcribe(Path("video.mp4"), model_size="small", download_root=tmp_path)
+
+
+def test_transcribe_does_not_treat_cancellation_as_a_gpu_failure(monkeypatch, tmp_path):
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
+    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+
+    cpu_load_calls = []
+
+    def fake_load_model(model_dir, device):
+        if device == "cpu":
+            cpu_load_calls.append(1)
+        return FakeWhisperModel([FakeRawSegment(start=0.0, end=1.0, text="x")])
+
+    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+
+    with pytest.raises(TranscriptionCancelled):
+        transcribe(
+            Path("video.mp4"),
+            model_size="small",
+            download_root=tmp_path,
+            should_cancel=lambda: True,
+        )
+
+    assert cpu_load_calls == []
+
+
+def test_get_transcribe_device_reports_detected_device(monkeypatch):
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
+    assert get_transcribe_device() == "cuda"
+
+    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cpu")
+    assert get_transcribe_device() == "cpu"
+
+
+def test_register_gpu_dll_dirs_adds_existing_bin_dirs_to_dll_search_and_path(monkeypatch, tmp_path):
+    """Covers the pip-only install case: nvidia-cublas-cu12/nvidia-cudnn-cu12
+    put their DLLs under site-packages, not a system PATH location, and
+    ctranslate2's own LoadLibrary call doesn't discover them on its own."""
+    import os
+    import types
+
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_gpu_dll_dirs_registered", False)
+
+    cublas_pkg = tmp_path / "cublas_pkg"
+    (cublas_pkg / "bin").mkdir(parents=True)
+    cudnn_pkg_without_bin = tmp_path / "cudnn_pkg"  # no bin dir - must be skipped, not error
+
+    def fake_import_module(name):
+        if name == "nvidia.cublas":
+            return types.SimpleNamespace(__path__=[str(cublas_pkg)])
+        if name == "nvidia.cudnn":
+            return types.SimpleNamespace(__path__=[str(cudnn_pkg_without_bin)])
+        raise ImportError(name)
+
+    monkeypatch.setattr(whisper_service.importlib, "import_module", fake_import_module)
+
+    added_dirs = []
+    monkeypatch.setattr(os, "add_dll_directory", lambda path: added_dirs.append(path), raising=False)
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    original_path = os.environ.get("PATH", "")
+
+    whisper_service._register_gpu_dll_dirs()
+
+    expected_bin_dir = str(cublas_pkg / "bin")
+    assert added_dirs == [expected_bin_dir]
+    assert os.environ["PATH"] == expected_bin_dir + os.pathsep + original_path
+
+
+def test_register_gpu_dll_dirs_is_a_no_op_the_second_time(monkeypatch, tmp_path):
+    import os
+
+    from app.services import whisper_service
+
+    monkeypatch.setattr(whisper_service, "_gpu_dll_dirs_registered", True)
+    calls = []
+    monkeypatch.setattr(whisper_service.importlib, "import_module", lambda name: calls.append(name))
+
+    whisper_service._register_gpu_dll_dirs()
 
     assert calls == []

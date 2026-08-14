@@ -1,3 +1,5 @@
+import importlib
+import logging
 import os
 import uuid
 from collections.abc import Callable, Iterable
@@ -6,6 +8,9 @@ from typing import Protocol
 
 from app.core.config import WHISPER_MODEL_SIZES
 from app.models.schemas import Segment, Word
+from app.services.readability_service import MAX_DURATION_SEC, MIN_DURATION_SEC
+
+logger = logging.getLogger(__name__)
 
 _MODEL_CACHE: dict[str, object] = {}
 
@@ -18,8 +23,11 @@ _LOGPROB_THRESHOLD = -1.0
 _COMPRESSION_RATIO_THRESHOLD = 2.4
 
 # faster-whisper's compute_type: int8 quantization keeps CPU inference fast
-# and low-memory while staying close to the fp32 model's accuracy.
-_COMPUTE_TYPE = "int8"
+# and low-memory while staying close to the fp32 model's accuracy. On GPU,
+# float16 is both faster and more accurate than int8 quantization would be,
+# and modern CUDA cards handle it natively.
+_CPU_COMPUTE_TYPE = "int8"
+_GPU_COMPUTE_TYPE = "float16"
 
 # ctranslate2 defaults cpu_threads=0 to min(4, core_count) regardless of how
 # many cores are actually available, silently leaving most of a modern CPU
@@ -78,6 +86,83 @@ def _extract_words(raw_segment: object) -> list[Word]:
         Word(text=raw_word.word.strip(), start=float(raw_word.start), end=float(raw_word.end))
         for raw_word in raw_words
     ]
+
+
+# Split long segments back down to the same threshold `readability_service`
+# already flags as "too long" - otherwise every run-on sentence Whisper
+# decodes as one segment lands in the review list needing a manual split.
+_LEADING_PUNCTUATION = set(",.!?;:)]}'\"”’")
+
+
+def _join_words(words: list[Word]) -> str:
+    parts: list[str] = []
+    for word in words:
+        text = word.text
+        if parts and text and text[0] in _LEADING_PUNCTUATION:
+            parts[-1] = parts[-1] + text
+        elif text:
+            parts.append(text)
+    return " ".join(parts).strip()
+
+
+def _split_long_segment(segment: Segment, max_duration: float, min_duration: float) -> list[Segment]:
+    duration = segment.end - segment.start
+    if duration <= max_duration or len(segment.words) < 2:
+        return [segment]
+
+    words = segment.words
+    mid_time = (segment.start + segment.end) / 2
+
+    # Split at the word boundary with the longest silence gap (a natural
+    # pause), preferring whichever such gap sits closest to the midpoint so
+    # both halves come out reasonably balanced rather than a tiny sliver.
+    best_index: int | None = None
+    best_score: tuple[float, float] | None = None
+    for i in range(len(words) - 1):
+        left_duration = words[i].end - segment.start
+        right_duration = segment.end - words[i + 1].start
+        if left_duration < min_duration or right_duration < min_duration:
+            continue
+        gap = words[i + 1].start - words[i].end
+        boundary_time = (words[i].end + words[i + 1].start) / 2
+        score = (gap, -abs(boundary_time - mid_time))
+        if best_score is None or score > best_score:
+            best_score = score
+            best_index = i
+
+    if best_index is None:
+        return [segment]
+
+    left_words = words[: best_index + 1]
+    right_words = words[best_index + 1 :]
+    left = segment.model_copy(
+        update={
+            "id": uuid.uuid4().hex,
+            "start": segment.start,
+            "end": left_words[-1].end,
+            "text": _join_words(left_words),
+            "words": left_words,
+        }
+    )
+    right = segment.model_copy(
+        update={
+            "id": uuid.uuid4().hex,
+            "start": right_words[0].start,
+            "end": segment.end,
+            "text": _join_words(right_words),
+            "words": right_words,
+        }
+    )
+    return _split_long_segment(left, max_duration, min_duration) + _split_long_segment(
+        right, max_duration, min_duration
+    )
+
+
+def _split_long_segments(segments: list[Segment]) -> list[Segment]:
+    result: list[Segment] = []
+    for segment in segments:
+        result.extend(_split_long_segment(segment, MAX_DURATION_SEC, MIN_DURATION_SEC))
+    return result
 
 
 class WhisperModel(Protocol):
@@ -183,15 +268,83 @@ def _download_model_with_progress(
         )
 
 
-def _get_model(
+def _detect_device() -> str:
+    """"cuda" if ctranslate2 can see a usable GPU, otherwise "cpu".
+
+    Any detection failure (no driver, no CUDA/cuDNN libs, etc.) falls back to
+    "cpu" instead of raising, so machines without a GPU behave exactly as
+    before.
+    """
+    try:
+        import ctranslate2
+
+        return "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+    except Exception:
+        return "cpu"
+
+
+def get_transcribe_device() -> str:
+    """Public wrapper around `_detect_device` for API/status reporting - this
+    only reports which device *would* be tried first. `transcribe()` still
+    falls back to CPU on its own if that device fails, at load time or at
+    actual run time (e.g. a missing cuBLAS/cuDNN DLL only surfacing once a
+    kernel actually runs)."""
+    return _detect_device()
+
+
+# pip-installed nvidia-cublas-cu12 / nvidia-cudnn-cu12 wheels bundle the CUDA
+# DLLs under their own site-packages directory rather than a system PATH
+# location. torch registers that directory for you via a custom import hook;
+# ctranslate2 doesn't, so ctranslate2's lazy LoadLibrary("cublas64_12.dll")
+# fails even though the file is right there on disk. os.add_dll_directory
+# only covers loads that opt into the "extended" DLL search (AddDllDirectory
+# API); ctranslate2's own LoadLibrary call may not, so this also prepends the
+# directories to PATH, which the classic search order always honors.
+_gpu_dll_dirs_registered = False
+
+
+def _register_gpu_dll_dirs() -> None:
+    global _gpu_dll_dirs_registered
+    if _gpu_dll_dirs_registered or os.name != "nt":
+        return
+    _gpu_dll_dirs_registered = True
+    for package in ("nvidia.cublas", "nvidia.cudnn", "nvidia.cuda_nvrtc"):
+        try:
+            module = importlib.import_module(package)
+            bin_dir = Path(module.__path__[0]) / "bin"
+            if not bin_dir.is_dir():
+                continue
+            os.add_dll_directory(str(bin_dir))
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+        except Exception:
+            logger.debug("Could not register GPU DLL directory for %s", package, exc_info=True)
+
+
+def _load_model(model_dir: Path, device: str) -> WhisperModel:
+    from faster_whisper import WhisperModel as FasterWhisperModel
+
+    if device == "cuda":
+        _register_gpu_dll_dirs()
+
+    compute_type = _GPU_COMPUTE_TYPE if device == "cuda" else _CPU_COMPUTE_TYPE
+    return FasterWhisperModel(
+        str(model_dir), device=device, compute_type=compute_type, cpu_threads=_CPU_THREADS
+    )
+
+
+def _get_model_on_device(
     model_size: str,
+    device: str,
     on_stage: Callable[[str], None] | None = None,
     on_progress: ProgressCallback | None = None,
     download_root: Path | None = None,
 ) -> WhisperModel:
-    from faster_whisper import WhisperModel as FasterWhisperModel
-
-    if model_size not in _MODEL_CACHE:
+    # Cached per (model_size, device) rather than just model_size - a GPU
+    # instance that turns out to be unusable (see transcribe()'s fallback)
+    # must not shadow a working CPU instance for the same model, and vice
+    # versa.
+    cache_key = f"{model_size}:{device}"
+    if cache_key not in _MODEL_CACHE:
         root = download_root if download_root is not None else _default_download_root()
         model_dir = _model_dir(model_size, root)
         if not is_model_cached(model_size, download_root=root):
@@ -199,29 +352,21 @@ def _get_model(
                 on_stage("downloading_model")
             model_dir.mkdir(parents=True, exist_ok=True)
             _download_model_with_progress(model_size, str(model_dir), on_progress)
-        _MODEL_CACHE[model_size] = FasterWhisperModel(
-            str(model_dir), device="cpu", compute_type=_COMPUTE_TYPE, cpu_threads=_CPU_THREADS
-        )
+        _MODEL_CACHE[cache_key] = _load_model(model_dir, device)
         if on_stage is not None:
             on_stage("processing")
-    return _MODEL_CACHE[model_size]
+    return _MODEL_CACHE[cache_key]
 
 
-def transcribe(
+def _run_transcribe(
+    active_model: WhisperModel,
     media_path: Path,
-    model_size: str,
-    model: WhisperModel | None = None,
-    on_progress: ProgressCallback | None = None,
-    on_stage: Callable[[str], None] | None = None,
-    download_root: Path | None = None,
-    should_cancel: CancelCallback | None = None,
-    language: str | None = None,
-    multilingual: bool = False,
+    on_progress: ProgressCallback | None,
+    should_cancel: CancelCallback | None,
+    language: str | None,
+    multilingual: bool,
+    report_progress: bool,
 ) -> list[Segment]:
-    active_model = model or _get_model(
-        model_size, on_stage=on_stage, on_progress=on_progress, download_root=download_root
-    )
-
     # word_timestamps=True runs faster-whisper's cross-attention/DTW word
     # alignment pass, which re-derives segment start/end times from the
     # actual audio instead of just estimating them from token position.
@@ -248,7 +393,6 @@ def transcribe(
     # tracking how far each yielded segment's end time is into the audio,
     # rather than a callback hook (faster-whisper has no equivalent of
     # openai-whisper's tqdm-based progress bar).
-    report_progress = on_progress is not None and model is None
     total_duration = getattr(info, "duration", None) if report_progress else None
 
     segments = []
@@ -269,4 +413,48 @@ def transcribe(
                 words=_extract_words(raw_segment),
             )
         )
-    return segments
+    return _split_long_segments(segments)
+
+
+def transcribe(
+    media_path: Path,
+    model_size: str,
+    model: WhisperModel | None = None,
+    on_progress: ProgressCallback | None = None,
+    on_stage: Callable[[str], None] | None = None,
+    download_root: Path | None = None,
+    should_cancel: CancelCallback | None = None,
+    language: str | None = None,
+    multilingual: bool = False,
+) -> list[Segment]:
+    if model is not None:
+        return _run_transcribe(
+            model, media_path, on_progress, should_cancel, language, multilingual, report_progress=False
+        )
+
+    report_progress = on_progress is not None
+    device = _detect_device()
+    try:
+        active_model = _get_model_on_device(
+            model_size, device, on_stage=on_stage, on_progress=on_progress, download_root=download_root
+        )
+        return _run_transcribe(
+            active_model, media_path, on_progress, should_cancel, language, multilingual, report_progress
+        )
+    except TranscriptionCancelled:
+        raise
+    except Exception:
+        if device == "cpu":
+            raise
+        # GPU can fail at model construction *or* only once a kernel actually
+        # runs (e.g. a missing cuBLAS/cuDNN DLL) - either way, retry once on
+        # CPU instead of failing the whole transcription over a GPU problem.
+        logger.warning(
+            "GPU transcription failed for model=%s - retrying on CPU.", model_size, exc_info=True
+        )
+        cpu_model = _get_model_on_device(
+            model_size, "cpu", on_stage=on_stage, on_progress=on_progress, download_root=download_root
+        )
+        return _run_transcribe(
+            cpu_model, media_path, on_progress, should_cancel, language, multilingual, report_progress
+        )

@@ -18,4 +18,5 @@ async def get_model_status() -> ModelStatus:
         translation={
             direction: translator.is_cached(direction) for direction in _TRANSLATION_DIRECTIONS
         },
+        whisper_device=whisper_service.get_transcribe_device(),
     )

@@ -7,6 +7,20 @@
   min-width: 220px;
 }
 
+.segment-list-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding-top: 20px;
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .segment-list-header {
   display: flex;
   align-items: center;
@@ -15,6 +29,13 @@
 }
 .segment-list-header h2 {
   margin-bottom: 0;
+}
+
+.segment-list-tools-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 14px;
 }
 
 .segment-list-pager {
@@ -47,13 +68,16 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-width: 960px;
 }
 
 .segment-list li {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* Keeps a scrollIntoView({block:'start'}) target from landing underneath
+     the sticky toolbar above the list - the toolbar's real height is kept
+     live in this var by a ResizeObserver in SegmentList.tsx. */
+  scroll-margin-top: var(--segment-toolbar-height, 230px);
 }
 
 .segment-list-item {
@@ -239,14 +263,21 @@ li:has(.segment-list-item.selected) > .segment-select-checkbox,
 .segment-filler-detect {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  margin: 6px 0;
   padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
-  max-width: 820px;
+}
+
+.segment-find-replace {
+  flex: 1;
+  min-width: 0;
+}
+
+.segment-filler-detect {
+  flex-shrink: 0;
 }
 
 .segment-find-replace select,

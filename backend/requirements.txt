@@ -15,5 +15,12 @@ ctranslate2>=4.4
 # https://huggingface.co/pyannote/speaker-diarization-3.1 이용약관 동의가 필요합니다.
 pyannote-audio>=3.3
 
+# GPU 전사 가속(선택 기능, Windows) - NVIDIA GPU가 있고 CUDA Toolkit을 따로
+# 설치하지 않은 환경에서, faster-whisper(ctranslate2)가 필요로 하는 cuBLAS/
+# cuDNN DLL을 pip으로 제공합니다. 없어도 앱은 CPU로 정상 동작합니다
+# (whisper_service._detect_device가 자동 감지해 CPU로 전사).
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+
 pytest>=8.3
 httpx>=0.27

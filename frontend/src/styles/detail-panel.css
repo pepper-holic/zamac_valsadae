@@ -1,13 +1,14 @@
 /* ---------- Reviewed toggle button + quality callout (detail panel) ---------- */
 .reviewed-button {
-  align-self: flex-start;
-  padding: 6px 12px;
+  flex-shrink: 0;
+  padding: 5px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 .reviewed-button.checked {
@@ -42,15 +43,15 @@
 .detail-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   flex: 1 0 320px;
   min-width: 220px;
 }
 
 .detail-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
 }
 .detail-header h2 {
   margin: 0;
@@ -59,11 +60,18 @@
 .detail-nav {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
 }
-.detail-nav button {
+
+.detail-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-nav-group button {
   padding: 5px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -83,8 +91,8 @@
 .detail-timing {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -120,12 +128,12 @@
   margin-top: 4px;
 }
 .timing-actions button {
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
-  font-size: 12px;
+  font-size: 11.5px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -156,14 +164,14 @@
 }
 
 .detail-textarea {
-  font-size: 14px;
-  padding: 10px;
+  font-size: 13px;
+  padding: 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-h);
   resize: vertical;
-  min-height: 70px;
+  min-height: 52px;
   width: 100%;
   font-family: var(--sans);
 }
@@ -186,7 +194,6 @@
 }
 
 .timing-actions .danger-button {
-  margin-left: auto;
   color: var(--danger);
   background: var(--danger-bg);
   border-color: var(--danger);

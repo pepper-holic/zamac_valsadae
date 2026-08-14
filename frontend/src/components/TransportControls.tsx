@@ -45,7 +45,7 @@ export function TransportControls({
 
       <label className="checkbox-label" data-tip="켜두면 선택한 문장의 시작~종료 구간을 자동으로 반복 재생합니다.">
         <input type="checkbox" checked={loopSegment} onChange={onLoopToggle} />
-        현재 구간 반복
+        구간 반복
       </label>
     </div>
   )

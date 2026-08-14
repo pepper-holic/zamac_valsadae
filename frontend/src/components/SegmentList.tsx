@@ -68,6 +68,8 @@ export function SegmentList({
   onBulkMarkReviewed,
 }: Props) {
   const activeRowRef = useRef<HTMLLIElement>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   const [page, setPage] = useState(0)
   const [filter, setFilter] = useState<FilterKey>('all')
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
@@ -183,8 +185,27 @@ export function SegmentList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSegmentId])
 
+  // Keeps the sticky toolbar's live height in a CSS var so scroll-margin-top
+  // (below) can consistently land the selected row just under it instead of
+  // partially hidden behind it - the toolbar's height varies (bulk actions
+  // bar, filter tab wrapping), so a fixed offset would drift out of sync.
   useEffect(() => {
-    activeRowRef.current?.scrollIntoView({ block: 'nearest' })
+    const toolbarEl = toolbarRef.current
+    const listEl = listRef.current
+    // listEl only exists once segments have actually loaded (an empty list
+    // renders a hint paragraph instead of the <ul>) - re-attempt once that
+    // happens instead of giving up forever on an effect that ran too early.
+    if (!toolbarEl || !listEl || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height ?? 0
+      listEl.style.setProperty('--segment-toolbar-height', `${height + 28}px`)
+    })
+    observer.observe(toolbarEl)
+    return () => observer.disconnect()
+  }, [segments.length > 0])
+
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: 'start' })
   }, [selectedSegmentId, page])
 
   async function handleToggleReviewed(segment: Segment, event: React.MouseEvent) {
@@ -198,149 +219,153 @@ export function SegmentList({
 
   return (
     <section className="segment-list-panel">
-      <div className="segment-list-header">
-        <h2>
-          검수 대상 문장 ({segments.length})
-          <PanelHint tip="전사/번역된 문장을 한 줄씩 검수합니다. 문제가 있는 문장은 표시되어 확인하기 쉽습니다." />
-        </h2>
-        {totalPages > 1 && (
-          <div className="segment-list-pager">
+      <div className="segment-list-toolbar" ref={toolbarRef}>
+        <div className="segment-list-header">
+          <h2>
+            검수 대상 문장 ({segments.length})
+            <PanelHint tip="전사/번역된 문장을 한 줄씩 검수합니다. 문제가 있는 문장은 표시되어 확인하기 쉽습니다." />
+          </h2>
+          {totalPages > 1 && (
+            <div className="segment-list-pager">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                disabled={page === 0}
+                data-tip="이전 페이지 (20개씩)"
+              >
+                ◀
+              </button>
+              <span>
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
+                disabled={page === totalPages - 1}
+                data-tip="다음 페이지 (20개씩)"
+              >
+                ▶
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="segment-list-tools-row">
+          <div className="segment-find-replace">
+            <select value={findField} onChange={(event) => setFindField(event.target.value as 'text' | 'translation')}>
+              <option value="text">원문</option>
+              <option value="translation">번역</option>
+            </select>
+            <input
+              type="text"
+              placeholder="찾기"
+              value={findText}
+              onChange={(event) => setFindText(event.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="바꾸기"
+              value={replaceText}
+              onChange={(event) => setReplaceText(event.target.value)}
+            />
             <button
               type="button"
-              onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-              disabled={page === 0}
-              data-tip="이전 페이지 (20개씩)"
+              onClick={handleFindReplaceClick}
+              disabled={!findText || isReplacing}
+              data-tip="원문 또는 번역 전체에서 일치하는 텍스트를 한 번에 바꿉니다."
             >
-              ◀
+              {isReplacing ? '바꾸는 중...' : '모두 바꾸기'}
             </button>
-            <span>
-              {page + 1} / {totalPages}
-            </span>
+          </div>
+
+          <div className="segment-filler-detect">
+            <select value={fillerLanguage} onChange={(event) => setFillerLanguage(event.target.value as 'ko' | 'en')}>
+              <option value="ko">한국어</option>
+              <option value="en">영어</option>
+            </select>
             <button
               type="button"
-              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
-              disabled={page === totalPages - 1}
-              data-tip="다음 페이지 (20개씩)"
+              onClick={handleDetectFillersClick}
+              disabled={segments.length === 0 || isDetectingFillers}
+              data-tip="'음', '어'처럼 문장 전체가 필러워드인 세그먼트를 찾아 선택 상태로 만듭니다. 삭제는 아래 선택 항목 삭제 버튼으로 직접 확인 후 실행하세요."
             >
-              ▶
+              {isDetectingFillers ? '찾는 중...' : '필러워드 자동 찾기'}
+            </button>
+          </div>
+        </div>
+
+        {checkedIds.size > 0 && (
+          <div className="segment-bulk-actions">
+            <span>{checkedIds.size}개 선택됨</span>
+            <button type="button" onClick={handleBulkMarkReviewedClick} disabled={isBulkBusy}>
+              검토완료로 표시
+            </button>
+            <button
+              type="button"
+              onClick={handleMerge}
+              disabled={isBulkBusy || checkedIds.size < 2}
+              data-tip="선택한 문장들을 시간 순서대로 하나로 합칩니다 (2개 이상 선택 필요)."
+            >
+              병합
+            </button>
+            <button type="button" className="danger-button" onClick={handleBulkDeleteClick} disabled={isBulkBusy}>
+              삭제
             </button>
           </div>
         )}
-      </div>
 
-      <div className="segment-find-replace">
-        <select value={findField} onChange={(event) => setFindField(event.target.value as 'text' | 'translation')}>
-          <option value="text">원문</option>
-          <option value="translation">번역</option>
-        </select>
-        <input
-          type="text"
-          placeholder="찾기"
-          value={findText}
-          onChange={(event) => setFindText(event.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="바꾸기"
-          value={replaceText}
-          onChange={(event) => setReplaceText(event.target.value)}
-        />
-        <button
-          type="button"
-          onClick={handleFindReplaceClick}
-          disabled={!findText || isReplacing}
-          data-tip="원문 또는 번역 전체에서 일치하는 텍스트를 한 번에 바꿉니다."
-        >
-          {isReplacing ? '바꾸는 중...' : '모두 바꾸기'}
-        </button>
-      </div>
-
-      <div className="segment-filler-detect">
-        <select value={fillerLanguage} onChange={(event) => setFillerLanguage(event.target.value as 'ko' | 'en')}>
-          <option value="ko">한국어</option>
-          <option value="en">영어</option>
-        </select>
-        <button
-          type="button"
-          onClick={handleDetectFillersClick}
-          disabled={segments.length === 0 || isDetectingFillers}
-          data-tip="'음', '어'처럼 문장 전체가 필러워드인 세그먼트를 찾아 선택 상태로 만듭니다. 삭제는 아래 선택 항목 삭제 버튼으로 직접 확인 후 실행하세요."
-        >
-          {isDetectingFillers ? '찾는 중...' : '필러워드 자동 찾기'}
-        </button>
-      </div>
-
-      {checkedIds.size > 0 && (
-        <div className="segment-bulk-actions">
-          <span>{checkedIds.size}개 선택됨</span>
-          <button type="button" onClick={handleBulkMarkReviewedClick} disabled={isBulkBusy}>
-            검토완료로 표시
+        <div className="segment-filter-tabs">
+          <label
+            className="checkbox-label"
+            data-tip="현재 필터에 보이는 문장을 모두 선택합니다. 선택 후 위의 검토완료/병합/삭제 버튼으로 한 번에 처리하세요."
+          >
+            <input
+              type="checkbox"
+              checked={filteredSegments.length > 0 && filteredSegments.every((segment) => checkedIds.has(segment.id))}
+              onChange={toggleSelectAllFiltered}
+            />
+            전체 선택 ({filteredSegments.length})
+          </label>
+          <span className="segment-filter-label">필터:</span>
+          <button
+            type="button"
+            className={filter === 'all' ? 'segment-filter-tab active' : 'segment-filter-tab'}
+            onClick={() => setFilter('all')}
+          >
+            전체
           </button>
           <button
             type="button"
-            onClick={handleMerge}
-            disabled={isBulkBusy || checkedIds.size < 2}
-            data-tip="선택한 문장들을 시간 순서대로 하나로 합칩니다 (2개 이상 선택 필요)."
+            className={filter === 'unreviewed' ? 'segment-filter-tab active warn' : 'segment-filter-tab warn'}
+            onClick={() => setFilter('unreviewed')}
+            data-tip="아직 검토 표시가 없는 문장입니다."
           >
-            병합
+            <span aria-hidden="true">○</span> 미작업 ({unreviewedCount})
           </button>
-          <button type="button" className="danger-button" onClick={handleBulkDeleteClick} disabled={isBulkBusy}>
-            삭제
+          <button
+            type="button"
+            className={filter === 'needsCheck' ? 'segment-filter-tab active warn' : 'segment-filter-tab warn'}
+            onClick={() => setFilter('needsCheck')}
+            data-tip="전사/번역 신뢰도가 낮거나 자막 가독성 기준(초당 글자 수, 줄 길이, 지속시간)을 벗어나 사람이 확인해야 할 문장입니다."
+          >
+            <span aria-hidden="true">⚠</span> 검토 필요 ({needsCheckCount})
+          </button>
+          <button
+            type="button"
+            className={filter === 'ok' ? 'segment-filter-tab active' : 'segment-filter-tab'}
+            onClick={() => setFilter('ok')}
+          >
+            괜찮음 ({okCount})
+          </button>
+          <button
+            type="button"
+            className={filter === 'reviewed' ? 'segment-filter-tab active ok' : 'segment-filter-tab ok'}
+            onClick={() => setFilter('reviewed')}
+            data-tip="사용자가 직접 검토 완료로 표시한 문장입니다."
+          >
+            <span aria-hidden="true">✓</span> 완료 ({reviewedCount})
           </button>
         </div>
-      )}
-
-      <div className="segment-filter-tabs">
-        <label
-          className="checkbox-label"
-          data-tip="현재 필터에 보이는 문장을 모두 선택합니다. 선택 후 위의 검토완료/병합/삭제 버튼으로 한 번에 처리하세요."
-        >
-          <input
-            type="checkbox"
-            checked={filteredSegments.length > 0 && filteredSegments.every((segment) => checkedIds.has(segment.id))}
-            onChange={toggleSelectAllFiltered}
-          />
-          전체 선택 ({filteredSegments.length})
-        </label>
-        <span className="segment-filter-label">필터:</span>
-        <button
-          type="button"
-          className={filter === 'all' ? 'segment-filter-tab active' : 'segment-filter-tab'}
-          onClick={() => setFilter('all')}
-        >
-          전체
-        </button>
-        <button
-          type="button"
-          className={filter === 'unreviewed' ? 'segment-filter-tab active warn' : 'segment-filter-tab warn'}
-          onClick={() => setFilter('unreviewed')}
-          data-tip="아직 검토 표시가 없는 문장입니다."
-        >
-          <span aria-hidden="true">○</span> 미작업 ({unreviewedCount})
-        </button>
-        <button
-          type="button"
-          className={filter === 'needsCheck' ? 'segment-filter-tab active warn' : 'segment-filter-tab warn'}
-          onClick={() => setFilter('needsCheck')}
-          data-tip="전사/번역 신뢰도가 낮거나 자막 가독성 기준(초당 글자 수, 줄 길이, 지속시간)을 벗어나 사람이 확인해야 할 문장입니다."
-        >
-          <span aria-hidden="true">⚠</span> 검토 필요 ({needsCheckCount})
-        </button>
-        <button
-          type="button"
-          className={filter === 'ok' ? 'segment-filter-tab active' : 'segment-filter-tab'}
-          onClick={() => setFilter('ok')}
-        >
-          괜찮음 ({okCount})
-        </button>
-        <button
-          type="button"
-          className={filter === 'reviewed' ? 'segment-filter-tab active ok' : 'segment-filter-tab ok'}
-          onClick={() => setFilter('reviewed')}
-          data-tip="사용자가 직접 검토 완료로 표시한 문장입니다."
-        >
-          <span aria-hidden="true">✓</span> 완료 ({reviewedCount})
-        </button>
       </div>
 
       {segments.length === 0 ? (
@@ -348,7 +373,7 @@ export function SegmentList({
       ) : filteredSegments.length === 0 ? (
         <p className="hint-text">이 필터에 해당하는 문장이 없습니다.</p>
       ) : (
-        <ul className="segment-list">
+        <ul className="segment-list" ref={listRef}>
           {pageSegments.map((segment, indexInPage) => {
             const index = startIndex + indexInPage
             const isSelected = segment.id === selectedSegmentId

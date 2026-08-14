@@ -2,11 +2,19 @@
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
+  gap: 8px;
+  min-height: 64px;
+  padding: 11px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  /* 'clip' (not 'visible') avoids the UA-computed overflow-y:auto that mixing
+     overflow-x:auto with overflow-y:visible triggers per spec - that auto
+     value turned a few px of natural content overflow into a visible
+     vertical scrollbar on the toolbar itself. */
+  overflow-y: clip;
+  scrollbar-width: thin;
   position: sticky;
   top: 0;
   z-index: 30;
@@ -20,12 +28,17 @@
   }
 }
 
+.toolbar > * {
+  flex-shrink: 0;
+}
+
 .toolbar-zone {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
+  gap: 6px;
+  padding: 3px 5px;
   border-radius: 10px;
+  flex-shrink: 0;
 }
 
 @media (max-width: 900px) {
@@ -36,7 +49,7 @@
 
 .toolbar-divider {
   width: 1px;
-  height: 22px;
+  height: 24px;
   background: var(--border);
   flex-shrink: 0;
 }
@@ -59,9 +72,9 @@
 }
 
 .toolbar-brand-mark {
-  width: 26px;
-  height: 26px;
-  padding: 5px;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
   border-radius: 7px;
   background: var(--accent);
   object-fit: contain;
@@ -69,29 +82,95 @@
   flex-shrink: 0;
 }
 
-.toolbar-workspace-switcher {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .toolbar-select {
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
-  font-size: 13px;
-  max-width: 260px;
+  font-size: 14px;
+  max-width: 220px;
 }
 
-.toolbar-ghost-button {
-  padding: 6px 12px;
+/* ---------- Menu bar (File / Help dropdowns) ---------- */
+.toolbar-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.toolbar-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.toolbar-menu-trigger:hover {
+  background: var(--code-bg);
+  color: var(--text-h);
+}
+.toolbar-menu-trigger.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.toolbar-menu {
+  min-width: 190px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolbar-menu-item {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.toolbar-menu-item:hover {
+  background: var(--code-bg);
+  color: var(--text-h);
+}
+.toolbar-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.toolbar-menu-item.danger {
+  color: var(--danger);
+}
+.toolbar-menu-item.danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+}
+
+.toolbar-ghost-button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -118,10 +197,19 @@
   background: var(--accent-bg);
   color: var(--accent);
 }
+.toolbar-primary-ghost.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.toolbar-zone-workflow {
+  flex-shrink: 0;
+}
 
 .upload-button.compact {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
 }
 
 .toolbar-zone-spacer {
@@ -132,13 +220,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 20px;
+  padding: 11px 22px;
   border-radius: 999px;
   border: none;
   background: var(--accent);
   color: #fff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   flex-shrink: 0;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
@@ -153,14 +241,12 @@
 }
 
 .toolbar-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 20px;
   width: min(520px, calc(100vw - 40px));
-  z-index: 20;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  z-index: 100;
   box-shadow: var(--shadow);
   border-radius: 12px;
-  overflow: hidden;
 }
 
 .toolbar-dropdown .panel {

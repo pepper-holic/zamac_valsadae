@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MediaItem, Project } from '../api/types'
+import type { MediaItem, Project, TranscribeDevice } from '../api/types'
 import { WHISPER_MODELS } from '../api/types'
 import { cancelItem, getModelStatus, transcribeItem } from '../api/client'
 import { PanelHint } from './PanelHint'
@@ -32,12 +32,16 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
   const [multilingual, setMultilingual] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [whisperCacheStatus, setWhisperCacheStatus] = useState<Record<string, boolean>>({})
+  const [whisperDevice, setWhisperDevice] = useState<TranscribeDevice | null>(null)
 
   useEffect(() => {
     let cancelled = false
     getModelStatus()
       .then((status) => {
-        if (!cancelled) setWhisperCacheStatus(status.whisper)
+        if (!cancelled) {
+          setWhisperCacheStatus(status.whisper)
+          setWhisperDevice(status.whisper_device)
+        }
       })
       .catch(() => {
         // best-effort only - selectors just skip the download badge on failure
@@ -139,6 +143,11 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
         )}
       </div>
       <p className="hint-text">{MODEL_NOTES[model]}</p>
+      {whisperDevice && (
+        <p className="hint-text" data-tip="전사에 사용할 하드웨어입니다. GPU가 감지되면 자동으로 사용하고, 없으면 CPU로 처리합니다.">
+          {whisperDevice === 'cuda' ? '🚀 GPU(CUDA) 감지됨 — GPU로 처리합니다.' : '🖥 GPU 미감지 — CPU로 처리합니다.'}
+        </p>
+      )}
       {!isBusy(item.status) && whisperCacheStatus[model] === false && (
         <p className="hint-text">⬇ 이 모델은 아직 다운로드되지 않았습니다. 전사 시작 시 최초 1회 자동으로 다운로드됩니다.</p>
       )}
@@ -175,8 +184,9 @@ export function TranscribePanel({ project, item, onStarted }: Props) {
           </div>
           <p className="hint-text">
             {Math.round((item.progress ?? 0) * 100)}% 처리 중 (경과{' '}
-            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}) — 모델을 로드하고 음성을
-            인식하는 중입니다. 모델 크기에 따라 수 분이 걸릴 수 있습니다.
+            {elapsedSeconds != null ? formatClock(elapsedSeconds) : '0:00'}
+            {whisperDevice ? `, ${whisperDevice === 'cuda' ? 'GPU' : 'CPU'}` : ''}) — 모델을 로드하고
+            음성을 인식하는 중입니다. 모델 크기에 따라 수 분이 걸릴 수 있습니다.
           </p>
         </div>
       )}

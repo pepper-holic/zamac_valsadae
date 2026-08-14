@@ -41,12 +41,17 @@ function TaskQueueChip({ task, onSelect }: ChipProps) {
         <span className="task-queue-chip-elapsed">{formatClock(elapsedSeconds)}</span>
       )}
       {task.item.progress != null && (
-        <span className="task-queue-chip-progress">
-          <span
-            className="task-queue-chip-progress-fill"
-            style={{ width: `${Math.round(task.item.progress * 100)}%` }}
-          />
-        </span>
+        <>
+          <span className="task-queue-chip-progress">
+            <span
+              className="task-queue-chip-progress-fill"
+              style={{ width: `${Math.round(task.item.progress * 100)}%` }}
+            />
+          </span>
+          <span className="task-queue-chip-progress-percent">
+            {Math.round(task.item.progress * 100)}%
+          </span>
+        </>
       )}
     </button>
   )

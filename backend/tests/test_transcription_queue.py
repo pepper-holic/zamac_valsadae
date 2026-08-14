@@ -5,9 +5,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_store
+from app.core.config import Settings
 from app.main import app
 from app.models.schemas import Segment
 from app.services import transcription_queue
+from app.services.diarization_service import SpeakerTurn
 from app.services.project_store import ProjectStore
 
 
@@ -100,3 +102,69 @@ def test_cancelling_a_queued_item_skips_it_instead_of_running_it(client, monkeyp
     items = client.get(f"/projects/{project['id']}").json()["items"]
     assert items[0]["status"] == "transcribed"
     assert items[1]["status"] == "uploaded"
+
+
+_SLOW_STEP_SECONDS = 0.3
+
+
+def _slow_transcribe(media_path, model_size, **kwargs):
+    time.sleep(_SLOW_STEP_SECONDS)
+    return [Segment(id="s1", start=0.0, end=1.0, text="hello")]
+
+
+def _slow_diarize(media_path, hf_token, **kwargs):
+    time.sleep(_SLOW_STEP_SECONDS)
+    return [SpeakerTurn(start=0.0, end=1.0, speaker="SPEAKER_00")]
+
+
+def test_diarize_and_transcribe_run_concurrently_not_back_to_back(client, monkeypatch):
+    project = _create_project(client)
+    item = _add_item(client, project["id"], filename="a.wav")
+
+    monkeypatch.setattr(
+        "app.services.transcription_queue.get_settings", lambda: Settings(hf_token="fake-token")
+    )
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", _slow_transcribe)
+    monkeypatch.setattr("app.services.transcription_queue.diarization_service.diarize", _slow_diarize)
+
+    started_at = time.monotonic()
+    client.post(
+        f"/projects/{project['id']}/items/{item['id']}/transcribe",
+        json={"model": "small", "diarize": True},
+    )
+    transcription_queue.wait_until_idle()
+    elapsed = time.monotonic() - started_at
+
+    # Sequential would take >= 2 * _SLOW_STEP_SECONDS; concurrent should stay
+    # close to a single step. Generous margin for scheduling/test-env noise.
+    assert elapsed < _SLOW_STEP_SECONDS * 1.7
+
+    items = client.get(f"/projects/{project['id']}").json()["items"]
+    assert items[0]["status"] == "transcribed"
+    assert items[0]["segments"][0]["speaker"] == "SPEAKER_00"
+
+
+def test_diarize_without_hf_token_fails_the_job_without_running_diarize(client, monkeypatch):
+    project = _create_project(client)
+    item = _add_item(client, project["id"], filename="a.wav")
+
+    monkeypatch.setattr(
+        "app.services.transcription_queue.get_settings", lambda: Settings(hf_token=None)
+    )
+    monkeypatch.setattr("app.services.transcription_queue.whisper_service.transcribe", _slow_transcribe)
+    diarize_calls = []
+    monkeypatch.setattr(
+        "app.services.transcription_queue.diarization_service.diarize",
+        lambda *a, **k: diarize_calls.append(1) or _slow_diarize(*a, **k),
+    )
+
+    client.post(
+        f"/projects/{project['id']}/items/{item['id']}/transcribe",
+        json={"model": "small", "diarize": True},
+    )
+    transcription_queue.wait_until_idle()
+
+    items = client.get(f"/projects/{project['id']}").json()["items"]
+    assert items[0]["status"] == "error"
+    assert "HF_TOKEN" in items[0]["error"]
+    assert diarize_calls == []

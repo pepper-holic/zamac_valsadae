@@ -4,40 +4,29 @@ import { mediaUrl } from './api/client'
 import { GlobalTooltip } from './components/GlobalTooltip'
 import { ProgressToast } from './components/ProgressToast'
 import { HomeView } from './components/home/HomeView'
-import { SegmentDetailPanel } from './components/SegmentDetailPanel'
+import { ReviewSidePanel } from './components/ReviewSidePanel'
+import { ReviewTimeline } from './components/ReviewTimeline'
 import { SegmentList } from './components/SegmentList'
-import { SubtitleStylePanel } from './components/SubtitleStylePanel'
 import { TaskQueuePanel } from './components/TaskQueuePanel'
 import { Toolbar } from './components/Toolbar'
-import { TranscribePanel } from './components/TranscribePanel'
-import { TranslationPanel } from './components/TranslationPanel'
-import type { ToolKey } from './components/ToolRail'
-import { ToolRail } from './components/ToolRail'
 import { VideoStage } from './components/VideoStage'
 import { usePanelWidths } from './hooks/usePanelWidths'
 import { useProjectWorkspace } from './hooks/useProjectWorkspace'
 import { useSegmentEditing } from './hooks/useSegmentEditing'
 import { useReviewDiffs } from './hooks/useReviewDiffs'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
-import { startColumnResize } from './utils/resize'
-
-const TOOL_DESCRIPTIONS: Record<ToolKey, string> = {
-  transcribe: 'Whisper로 음성을 인식해 문장 목록을 만듭니다.',
-  translate: '추출된 문장을 한↔영으로 번역합니다.',
-  style: '글꼴/색상/위치/효과를 설정해 미리보기에 반영합니다.',
-}
+import { startColumnResize, startRowResize } from './utils/resize'
 
 function App() {
-  const [activeTool, setActiveTool] = useState<ToolKey>('transcribe')
   const {
-    toolPanelWidth,
     videoColumnWidth,
-    handleToolPanelWidthChange,
     handleVideoColumnWidthChange,
-    TOOL_PANEL_MIN_WIDTH,
-    TOOL_PANEL_MAX_WIDTH,
     VIDEO_COLUMN_MIN_WIDTH,
     VIDEO_COLUMN_MAX_WIDTH,
+    workspaceTopHeight,
+    handleWorkspaceTopHeightChange,
+    WORKSPACE_TOP_MIN_HEIGHT,
+    WORKSPACE_TOP_MAX_HEIGHT,
   } = usePanelWidths()
 
   const [currentTime, setCurrentTime] = useState(0)
@@ -179,6 +168,7 @@ function App() {
         reviewDiffCount={reviewDiffs.length}
         onAcceptAllReviewDiffs={handleAcceptAllDiffs}
         onRejectAllReviewDiffs={handleRejectAllDiffs}
+        onGlossaryUpdated={handleProjectUpdated}
       />
 
       <TaskQueuePanel tasks={activeTasks} onSelectTask={handleSelectTask} />
@@ -202,118 +192,110 @@ function App() {
 
       {project && item && (
         <div className="workspace-row">
-          <ToolRail activeTool={activeTool} onSelect={setActiveTool} />
+          <div className="workspace-column">
+            <div className="workspace-top-row" style={{ height: workspaceTopHeight }}>
+              <div className="video-column" style={{ width: videoColumnWidth }}>
+                <VideoStage
+                  videoRef={videoRef}
+                  src={mediaUrl(project.id, item.id)}
+                  segments={segments}
+                  currentTime={currentTime}
+                  duration={duration}
+                  isPlaying={isPlaying}
+                  playbackRate={playbackRate}
+                  loopSegment={loopSegment}
+                  subtitleStyle={project.subtitle_style}
+                  onTimeUpdate={setCurrentTime}
+                  onDurationChange={setDuration}
+                  onPlayStateChange={setIsPlaying}
+                  onRateChange={(rate) => {
+                    setPlaybackRate(rate)
+                    if (videoRef.current) videoRef.current.playbackRate = rate
+                  }}
+                  onLoopToggle={() => setLoopSegment((prev) => !prev)}
+                />
+              </div>
 
-          <div className="tool-panel-column" style={{ width: toolPanelWidth }}>
-            <div
-              className="panel-resize-handle"
-              onPointerDown={(event) =>
-                startColumnResize(
-                  event,
-                  toolPanelWidth,
-                  handleToolPanelWidthChange,
-                  TOOL_PANEL_MIN_WIDTH,
-                  TOOL_PANEL_MAX_WIDTH,
-                )
-              }
-              data-tip="드래그해서 패널 너비를 조정합니다."
-            />
-            <div className="tool-panel-column-head">
-              <p className="tool-panel-column-desc">{TOOL_DESCRIPTIONS[activeTool]}</p>
-            </div>
-            {activeTool === 'transcribe' && (
-              <TranscribePanel project={project} item={item} onStarted={handleItemUpdated} />
-            )}
-            {activeTool === 'translate' && (
-              <TranslationPanel
+              <div
+                className="panel-resize-handle"
+                onPointerDown={(event) =>
+                  startColumnResize(
+                    event,
+                    videoColumnWidth,
+                    handleVideoColumnWidthChange,
+                    VIDEO_COLUMN_MIN_WIDTH,
+                    VIDEO_COLUMN_MAX_WIDTH,
+                  )
+                }
+                data-tip="드래그해서 영상/검수 영역 너비를 조정합니다."
+              />
+
+              <ReviewSidePanel
                 project={project}
                 item={item}
-                onStarted={handleItemUpdated}
-                onGlossaryUpdated={handleProjectUpdated}
+                segment={selectedSegment}
+                segmentPosition={segmentPosition}
+                currentTime={currentTime}
+                segmentDiffs={segmentDiffsForSelected}
+                onSegmentSaved={handleSegmentSaved}
+                onSegmentDeleted={handleSegmentDeleted}
+                onNavigate={handleNavigate}
+                onSeek={handleSeek}
+                onPlaySegment={handlePlaySegment}
+                onAcceptDiff={handleAcceptDiff}
+                onRejectDiff={handleRejectDiff}
+                onSplitSegment={handleSplitSegment}
+                onStyleUpdated={handleProjectUpdated}
               />
-            )}
-            {activeTool === 'style' && (
-              <SubtitleStylePanel project={project} onStyleUpdated={handleProjectUpdated} />
-            )}
+            </div>
+
+            <div
+              className="row-resize-handle"
+              onPointerDown={(event) =>
+                startRowResize(
+                  event,
+                  workspaceTopHeight,
+                  handleWorkspaceTopHeightChange,
+                  WORKSPACE_TOP_MIN_HEIGHT,
+                  WORKSPACE_TOP_MAX_HEIGHT,
+                )
+              }
+              data-tip="드래그해서 위/아래 영역 높이를 조정합니다."
+            />
+
+            <div className="review-timeline-row">
+              <ReviewTimeline
+                duration={duration}
+                currentTime={currentTime}
+                segments={segments}
+                selectedSegmentId={selectedSegmentId}
+                onSeek={handleSeek}
+                onSelectSegment={setSelectedSegmentId}
+                onResizeSegment={handleResizeSegment}
+              />
+            </div>
+
+            <div className="workspace-bottom-row">
+              <SegmentList
+                projectId={project.id}
+                itemId={item.id}
+                segments={segments}
+                selectedSegmentId={selectedSegmentId}
+                currentTime={currentTime}
+                diffs={reviewDiffs}
+                onSelect={(id) => {
+                  setSelectedSegmentId(id)
+                  const segment = segments.find((s) => s.id === id)
+                  if (segment) handleSeek(segment.start)
+                }}
+                onSegmentSaved={handleSegmentSaved}
+                onMergeSegments={handleMergeSegments}
+                onFindReplace={handleFindReplace}
+                onBulkDelete={handleBulkDelete}
+                onBulkMarkReviewed={handleBulkMarkReviewed}
+              />
+            </div>
           </div>
-
-        <div className="three-column-layout">
-          <div className="video-column" style={{ width: videoColumnWidth }}>
-          <VideoStage
-            videoRef={videoRef}
-            src={mediaUrl(project.id, item.id)}
-            segments={segments}
-            selectedSegmentId={selectedSegmentId}
-            currentTime={currentTime}
-            duration={duration}
-            isPlaying={isPlaying}
-            playbackRate={playbackRate}
-            loopSegment={loopSegment}
-            subtitleStyle={project.subtitle_style}
-            onTimeUpdate={setCurrentTime}
-            onDurationChange={setDuration}
-            onPlayStateChange={setIsPlaying}
-            onSeek={handleSeek}
-            onRateChange={(rate) => {
-              setPlaybackRate(rate)
-              if (videoRef.current) videoRef.current.playbackRate = rate
-            }}
-            onLoopToggle={() => setLoopSegment((prev) => !prev)}
-            onSelectSegment={setSelectedSegmentId}
-            onResizeSegment={handleResizeSegment}
-          />
-          </div>
-
-          <div
-            className="panel-resize-handle"
-            onPointerDown={(event) =>
-              startColumnResize(
-                event,
-                videoColumnWidth,
-                handleVideoColumnWidthChange,
-                VIDEO_COLUMN_MIN_WIDTH,
-                VIDEO_COLUMN_MAX_WIDTH,
-              )
-            }
-            data-tip="드래그해서 영상/목록 영역 너비를 조정합니다."
-          />
-
-          <SegmentList
-            projectId={project.id}
-            itemId={item.id}
-            segments={segments}
-            selectedSegmentId={selectedSegmentId}
-            currentTime={currentTime}
-            diffs={reviewDiffs}
-            onSelect={(id) => {
-              setSelectedSegmentId(id)
-              const segment = segments.find((s) => s.id === id)
-              if (segment) handleSeek(segment.start)
-            }}
-            onSegmentSaved={handleSegmentSaved}
-            onMergeSegments={handleMergeSegments}
-            onFindReplace={handleFindReplace}
-            onBulkDelete={handleBulkDelete}
-            onBulkMarkReviewed={handleBulkMarkReviewed}
-          />
-
-          <SegmentDetailPanel
-            project={project}
-            item={item}
-            segment={selectedSegment}
-            segmentPosition={segmentPosition}
-            currentTime={currentTime}
-            segmentDiffs={segmentDiffsForSelected}
-            onSegmentSaved={handleSegmentSaved}
-            onSegmentDeleted={handleSegmentDeleted}
-            onNavigate={handleNavigate}
-            onSeek={handleSeek}
-            onPlaySegment={handlePlaySegment}
-            onAcceptDiff={handleAcceptDiff}
-            onRejectDiff={handleRejectDiff}
-            onSplitSegment={handleSplitSegment}
-          />
-        </div>
         </div>
       )}
     </div>

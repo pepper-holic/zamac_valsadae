@@ -6,11 +6,16 @@ import { AboutModal } from './AboutModal'
 import { AuthModal } from './AuthModal'
 import { ExportPanel } from './ExportPanel'
 import { HelpModal } from './HelpModal'
+import { ToolbarDropdown } from './ToolbarDropdown'
+import { TranscribePanel } from './TranscribePanel'
+import { TranslationPanel } from './TranslationPanel'
 
 // 소유 도메인이 정해지면 이 오라클 VM의 nip.io 임시 주소를 교체하세요.
 const WEBSITE_URL = 'https://site.168-110-107-78.nip.io'
 
 const IN_PROGRESS_STATUSES = new Set(['transcribing', 'translating', 'rendering'])
+
+type DropdownKey = 'transcribe' | 'translate' | 'export' | 'file-menu' | 'help-menu'
 
 function formatItemStatus(item: MediaItem): string {
   if (IN_PROGRESS_STATUSES.has(item.status) && item.progress != null) {
@@ -46,6 +51,7 @@ type Props = {
   reviewDiffCount: number
   onAcceptAllReviewDiffs: () => Promise<void>
   onRejectAllReviewDiffs: () => void
+  onGlossaryUpdated: (project: Project) => void
 }
 
 export function Toolbar({
@@ -69,8 +75,9 @@ export function Toolbar({
   reviewDiffCount,
   onAcceptAllReviewDiffs,
   onRejectAllReviewDiffs,
+  onGlossaryUpdated,
 }: Props) {
-  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<DropdownKey | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
@@ -81,19 +88,25 @@ export function Toolbar({
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toolbarRef = useRef<HTMLElement>(null)
+  const fileMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const helpMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const transcribeTriggerRef = useRef<HTMLButtonElement>(null)
+  const translateTriggerRef = useRef<HTMLButtonElement>(null)
+  const exportTriggerRef = useRef<HTMLButtonElement>(null)
 
   const item = project?.items.find((i) => i.id === selectedItemId) ?? null
 
   useEffect(() => {
-    if (!isExportOpen) return
+    if (!openDropdown) return
     function handlePointerDown(event: MouseEvent) {
-      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
-        setIsExportOpen(false)
-      }
+      const target = event.target as Node
+      if (toolbarRef.current?.contains(target)) return
+      if (target instanceof Element && target.closest('[data-toolbar-portal]')) return
+      setOpenDropdown(null)
     }
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
-  }, [isExportOpen])
+  }, [openDropdown])
 
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
@@ -177,43 +190,72 @@ export function Toolbar({
         >
           <img className="toolbar-brand-mark" src="/app-icon-glyph.png" alt="" aria-hidden="true" />
         </button>
-        <div className="toolbar-divider" aria-hidden="true" />
-        <div className="toolbar-workspace-switcher">
-          <select
-            className="toolbar-select"
-            value={selectedProjectId ?? ''}
-            onChange={(event) => onSelectProject(event.target.value)}
-            data-tip="여러 파일을 묶어 관리하는 프로젝트를 선택합니다."
-          >
-            <option value="" disabled>
-              프로젝트 선택
-            </option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {projectLabel(p)} ({p.items.length}개 파일)
-              </option>
-            ))}
-          </select>
+
+        <div className="toolbar-menu-wrap">
           <button
+            ref={fileMenuTriggerRef}
             type="button"
-            className="toolbar-ghost-button toolbar-primary-ghost"
-            onClick={handleNewProject}
-            data-tip="파일 여러 개를 묶어 관리할 새 프로젝트를 만듭니다."
+            className={openDropdown === 'file-menu' ? 'toolbar-menu-trigger active' : 'toolbar-menu-trigger'}
+            onClick={() => setOpenDropdown((prev) => (prev === 'file-menu' ? null : 'file-menu'))}
           >
-            + 새 프로젝트
+            파일 <span aria-hidden="true">▾</span>
           </button>
-          {project && (
+          <ToolbarDropdown anchorRef={fileMenuTriggerRef} open={openDropdown === 'file-menu'} className="toolbar-menu">
             <button
               type="button"
-              className="toolbar-ghost-button toolbar-danger-ghost"
-              onClick={handleDeleteProject}
-              disabled={isDeletingProject}
-              data-tip="현재 선택된 프로젝트를 통째로 삭제합니다 (안의 모든 파일 포함, 되돌릴 수 없음)."
+              className="toolbar-menu-item"
+              onClick={() => {
+                setOpenDropdown(null)
+                handleNewProject()
+              }}
             >
-              {isDeletingProject ? '삭제 중...' : '프로젝트 삭제'}
+              + 새 프로젝트
             </button>
-          )}
+            {project && (
+              <button
+                type="button"
+                className="toolbar-menu-item danger"
+                onClick={() => {
+                  setOpenDropdown(null)
+                  handleDeleteProject()
+                }}
+                disabled={isDeletingProject}
+              >
+                {isDeletingProject ? '삭제 중...' : '프로젝트 삭제'}
+              </button>
+            )}
+            {item && (
+              <button
+                type="button"
+                className="toolbar-menu-item danger"
+                onClick={() => {
+                  setOpenDropdown(null)
+                  handleDeleteItem()
+                }}
+                disabled={isDeletingItem}
+              >
+                {isDeletingItem ? '삭제 중...' : '파일 삭제'}
+              </button>
+            )}
+          </ToolbarDropdown>
         </div>
+
+        <div className="toolbar-divider" aria-hidden="true" />
+        <select
+          className="toolbar-select"
+          value={selectedProjectId ?? ''}
+          onChange={(event) => onSelectProject(event.target.value)}
+          data-tip="여러 파일을 묶어 관리하는 프로젝트를 선택합니다."
+        >
+          <option value="" disabled>
+            프로젝트 선택
+          </option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {projectLabel(p)} ({p.items.length}개 파일)
+            </option>
+          ))}
+        </select>
       </div>
 
       {project && (
@@ -252,17 +294,38 @@ export function Toolbar({
               hidden
             />
           </label>
-          {item && (
-            <button
-              type="button"
-              className="toolbar-ghost-button toolbar-danger-ghost"
-              onClick={handleDeleteItem}
-              disabled={isDeletingItem}
-              data-tip="현재 선택된 파일만 프로젝트에서 삭제합니다 (되돌릴 수 없음)."
-            >
-              {isDeletingItem ? '삭제 중...' : '파일 삭제'}
-            </button>
-          )}
+        </div>
+      )}
+
+      {project && item && (
+        <div className="toolbar-zone toolbar-zone-workflow">
+          <div className="toolbar-divider" aria-hidden="true" />
+          <button
+            ref={transcribeTriggerRef}
+            type="button"
+            className={
+              openDropdown === 'transcribe'
+                ? 'toolbar-ghost-button toolbar-primary-ghost active'
+                : 'toolbar-ghost-button toolbar-primary-ghost'
+            }
+            onClick={() => setOpenDropdown((prev) => (prev === 'transcribe' ? null : 'transcribe'))}
+            data-tip="Whisper로 음성을 인식해 문장 목록을 만듭니다."
+          >
+            🎙 전사
+          </button>
+          <button
+            ref={translateTriggerRef}
+            type="button"
+            className={
+              openDropdown === 'translate'
+                ? 'toolbar-ghost-button toolbar-primary-ghost active'
+                : 'toolbar-ghost-button toolbar-primary-ghost'
+            }
+            onClick={() => setOpenDropdown((prev) => (prev === 'translate' ? null : 'translate'))}
+            data-tip="추출된 문장을 한↔영으로 번역합니다."
+          >
+            🌐 번역
+          </button>
         </div>
       )}
 
@@ -338,49 +401,88 @@ export function Toolbar({
         </div>
       )}
 
-      <a
-        className="toolbar-icon-button"
-        href={WEBSITE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        data-tip="서비스 웹사이트로 이동합니다 (소개 · 다운로드 · 가격 정책 등)."
-        aria-label="웹사이트로 이동"
-      >
-        ↗
-      </a>
+      <div className="toolbar-menu-wrap">
+        <button
+          ref={helpMenuTriggerRef}
+          type="button"
+          className={openDropdown === 'help-menu' ? 'toolbar-menu-trigger active' : 'toolbar-menu-trigger'}
+          onClick={() => setOpenDropdown((prev) => (prev === 'help-menu' ? null : 'help-menu'))}
+        >
+          도움말 <span aria-hidden="true">▾</span>
+        </button>
+        <ToolbarDropdown
+          anchorRef={helpMenuTriggerRef}
+          open={openDropdown === 'help-menu'}
+          align="right"
+          className="toolbar-menu"
+        >
+          <button
+            type="button"
+            className="toolbar-menu-item"
+            onClick={() => {
+              setOpenDropdown(null)
+              setIsHelpOpen(true)
+            }}
+          >
+            사용법 가이드
+          </button>
+          <button
+            type="button"
+            className="toolbar-menu-item"
+            onClick={() => {
+              setOpenDropdown(null)
+              setIsAboutOpen(true)
+            }}
+          >
+            프로그램 정보
+          </button>
+          <a
+            className="toolbar-menu-item"
+            href={WEBSITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpenDropdown(null)}
+          >
+            웹사이트로 이동 ↗
+          </a>
+        </ToolbarDropdown>
+      </div>
 
       <button
-        type="button"
-        className="toolbar-icon-button"
-        onClick={() => setIsAboutOpen(true)}
-        data-tip="프로그램 정보를 봅니다."
-        aria-label="프로그램 정보"
-      >
-        ⓘ
-      </button>
-
-      <button
-        type="button"
-        className="toolbar-icon-button"
-        onClick={() => setIsHelpOpen(true)}
-        data-tip="사용법 가이드를 엽니다."
-        aria-label="도움말"
-      >
-        ?
-      </button>
-
-      <button
+        ref={exportTriggerRef}
         type="button"
         className="toolbar-export-button"
-        onClick={() => setIsExportOpen((prev) => !prev)}
+        onClick={() => setOpenDropdown((prev) => (prev === 'export' ? null : 'export'))}
         disabled={!item}
         data-tip={item ? 'SRT/VTT/JSON 자막 파일로 내려받거나 영상을 렌더링합니다.' : '먼저 파일을 선택하세요.'}
       >
         ⭳ 내보내기
       </button>
 
-      {project && item && isExportOpen && (
-        <div className="toolbar-dropdown">
+      {project && item && (
+        <ToolbarDropdown anchorRef={transcribeTriggerRef} open={openDropdown === 'transcribe'} className="toolbar-dropdown">
+          <TranscribePanel project={project} item={item} onStarted={onItemUpdated} />
+        </ToolbarDropdown>
+      )}
+
+      {project && item && (
+        <ToolbarDropdown anchorRef={translateTriggerRef} open={openDropdown === 'translate'} className="toolbar-dropdown">
+          <TranslationPanel
+            project={project}
+            item={item}
+            onStarted={onItemUpdated}
+            onGlossaryUpdated={onGlossaryUpdated}
+          />
+        </ToolbarDropdown>
+      )}
+
+      {project && item && (
+        <ToolbarDropdown
+          anchorRef={exportTriggerRef}
+          open={openDropdown === 'export'}
+          align="right"
+          className="toolbar-dropdown"
+        >
           <ExportPanel
             project={project}
             item={item}
@@ -390,7 +492,7 @@ export function Toolbar({
             onAcceptAllReviewDiffs={onAcceptAllReviewDiffs}
             onRejectAllReviewDiffs={onRejectAllReviewDiffs}
           />
-        </div>
+        </ToolbarDropdown>
       )}
 
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}

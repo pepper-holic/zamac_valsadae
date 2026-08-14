@@ -18,6 +18,7 @@ TranslationEngine = Literal["local", "api"]
 ExportFormat = Literal["srt", "vtt", "json", "ass", "ttml"]
 ExportTextMode = Literal["original", "translation", "combined"]
 QualityFlag = Literal["good", "check"]
+TranscribeDevice = Literal["cuda", "cpu"]
 ProgressStage = Literal["downloading_model", "processing", "diarizing", "rendering"]
 
 
@@ -199,6 +200,7 @@ class ReviewImportResult(BaseModel):
 class ModelStatus(BaseModel):
     whisper: dict[str, bool] = Field(default_factory=dict)
     translation: dict[str, bool] = Field(default_factory=dict)
+    whisper_device: TranscribeDevice = "cpu"
 
 
 class AuthSessionRequest(BaseModel):

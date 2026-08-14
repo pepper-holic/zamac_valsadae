@@ -1,21 +1,84 @@
-/* ---------- Three column layout ---------- */
-.three-column-layout {
+/* ---------- Workspace layout ---------- */
+.workspace-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-column {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* top: sample video (left) + style/detail review tabs (right) */
+.workspace-top-row {
+  display: flex;
   gap: 1px;
   background: var(--border);
+  flex: 0 0 auto;
   overflow: hidden;
+}
+
+.row-resize-handle {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--border);
   position: relative;
+}
+.row-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
+  background: transparent;
+}
+.row-resize-handle:hover::after {
+  background: var(--accent-border);
+}
+
+/* full-width scrubber row, above the review list, separate from the sample video */
+.review-timeline-row {
+  flex-shrink: 0;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.review-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-timeline-scrubber {
+  display: flex;
+  flex-direction: column;
+}
+
+/* bottom: sentence review list, full width */
+.workspace-bottom-row {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
 }
 
 .video-column {
   flex: 0 1 auto;
-  min-width: 200px;
+  min-width: 300px;
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg);
-  padding: 20px;
+  padding: 14px;
 }
 
 .panel-resize-handle {
@@ -39,19 +102,66 @@
   background: var(--accent-border);
 }
 
-.three-column-layout > section {
-  background: var(--bg);
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 20px;
+.segment-list-panel {
+  padding: 0 20px 20px;
 }
 
-.three-column-layout h2 {
+.detail-panel {
+  padding: 14px;
+}
+
+.segment-list-panel h2,
+.detail-panel h2 {
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--accent);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
+/* ---------- Review side panel (style / detail review tabs) ---------- */
+.review-side-panel {
+  flex: 1;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.review-side-panel-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 8px 14px 0;
+}
+
+.review-side-panel-tab {
+  padding: 6px 14px;
+  border-radius: 8px 8px 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.review-side-panel-tab:hover {
+  color: var(--text-h);
+}
+.review-side-panel-tab.active {
+  background: var(--bg);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.review-side-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-top: 1px solid var(--border);
+}

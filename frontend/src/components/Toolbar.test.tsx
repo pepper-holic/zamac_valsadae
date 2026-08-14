@@ -82,6 +82,7 @@ function makeProps(overrides: Partial<Parameters<typeof Toolbar>[0]> = {}) {
     reviewDiffCount: 0,
     onAcceptAllReviewDiffs: vi.fn().mockResolvedValue(undefined),
     onRejectAllReviewDiffs: vi.fn(),
+    onGlossaryUpdated: vi.fn(),
     ...overrides,
   }
 }
@@ -120,6 +121,7 @@ describe('Toolbar', () => {
     vi.spyOn(window, 'prompt').mockReturnValue('New Project')
     render(<Toolbar {...makeProps({ onCreateProject })} />)
 
+    await user.click(screen.getByRole('button', { name: /파일/ }))
     await user.click(screen.getByRole('button', { name: '+ 새 프로젝트' }))
 
     expect(onCreateProject).toHaveBeenCalledWith('New Project')
@@ -131,6 +133,7 @@ describe('Toolbar', () => {
     vi.spyOn(window, 'prompt').mockReturnValue(null)
     render(<Toolbar {...makeProps({ onCreateProject })} />)
 
+    await user.click(screen.getByRole('button', { name: /파일/ }))
     await user.click(screen.getByRole('button', { name: '+ 새 프로젝트' }))
 
     expect(onCreateProject).not.toHaveBeenCalled()
@@ -143,6 +146,7 @@ describe('Toolbar', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<Toolbar {...makeProps({ onProjectDeleted })} />)
 
+    await user.click(screen.getByRole('button', { name: /파일/ }))
     await user.click(screen.getByRole('button', { name: '프로젝트 삭제' }))
 
     expect(deleteProject).toHaveBeenCalledWith('proj-1')
@@ -155,6 +159,7 @@ describe('Toolbar', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<Toolbar {...makeProps({ onProjectDeleted })} />)
 
+    await user.click(screen.getByRole('button', { name: /파일/ }))
     await user.click(screen.getByRole('button', { name: '프로젝트 삭제' }))
 
     expect(deleteProject).not.toHaveBeenCalled()

@@ -2,16 +2,16 @@
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 20px 24px;
+  padding: 14px 18px;
 }
 
 .panel h2 {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--accent);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .panel-hint {

@@ -23,6 +23,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -150,14 +151,6 @@ def _process(job: TranscribeJob, store: ProjectStore) -> None:
     on_stage = _make_stage_reporter(store, job.project_id, job.item_id)
 
     try:
-        segments = whisper_service.transcribe(
-            media_path,
-            model_size=job.model_size,
-            on_progress=on_progress,
-            on_stage=on_stage,
-            should_cancel=lambda: cancellation.is_cancelled(job.item_id),
-            multilingual=job.multilingual,
-        )
         if job.diarize:
             hf_token = get_settings().hf_token
             if not hf_token:
@@ -165,8 +158,38 @@ def _process(job: TranscribeJob, store: ProjectStore) -> None:
                     "화자 분리를 사용하려면 HF_TOKEN 설정이 필요합니다 "
                     "(HuggingFace에서 pyannote/speaker-diarization-3.1 모델 이용약관 동의 필요)."
                 )
-            turns = diarization_service.diarize(media_path, hf_token=hf_token, on_stage=on_stage)
+            # Transcription and diarization are two independent full passes
+            # over the same audio - neither's input depends on the other's
+            # output - so running them on separate threads overlaps the two
+            # instead of paying for both back-to-back ("이중전사"). Note this
+            # does mean a cancel requested while both are in flight still has
+            # to wait for diarization to finish too, since pyannote's pipeline
+            # call has no cancellation hook to interrupt early.
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                transcribe_future = executor.submit(
+                    whisper_service.transcribe,
+                    media_path,
+                    model_size=job.model_size,
+                    on_progress=on_progress,
+                    on_stage=on_stage,
+                    should_cancel=lambda: cancellation.is_cancelled(job.item_id),
+                    multilingual=job.multilingual,
+                )
+                diarize_future = executor.submit(
+                    diarization_service.diarize, media_path, hf_token=hf_token
+                )
+                segments = transcribe_future.result()
+                turns = diarize_future.result()
             segments = diarization_service.assign_speakers(segments, turns)
+        else:
+            segments = whisper_service.transcribe(
+                media_path,
+                model_size=job.model_size,
+                on_progress=on_progress,
+                on_stage=on_stage,
+                should_cancel=lambda: cancellation.is_cancelled(job.item_id),
+                multilingual=job.multilingual,
+            )
         final_segments = readability_service.apply_readability(segments, use_translation=False)
 
         def finish(i: MediaItem) -> None:

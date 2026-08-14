@@ -78,3 +78,11 @@
   transition: width 200ms linear;
 }
 
+.task-queue-chip-progress-percent {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+

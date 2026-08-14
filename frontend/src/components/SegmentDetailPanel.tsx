@@ -125,30 +125,31 @@ export function SegmentDetailPanel({
         <div className="detail-nav">
           <button
             type="button"
-            onClick={() => onNavigate('prev')}
-            data-tip="이전 문장으로 이동 (단축키: ↑)"
+            className={segment.reviewed ? 'reviewed-button checked' : 'reviewed-button'}
+            onClick={handleToggleReviewed}
+            data-tip={segment.reviewed ? '검토 완료 표시를 해제합니다.' : '이 문장을 검토 완료로 표시합니다.'}
           >
-            ◀ 이전
+            {segment.reviewed ? '✓ 검토 완료' : '검토 완료로 표시'}
           </button>
-          <span className="segment-position">{segmentPosition}</span>
-          <button
-            type="button"
-            onClick={() => onNavigate('next')}
-            data-tip="다음 문장으로 이동 (단축키: ↓)"
-          >
-            다음 ▶
-          </button>
+          <div className="detail-nav-group">
+            <button
+              type="button"
+              onClick={() => onNavigate('prev')}
+              data-tip="이전 문장으로 이동 (단축키: ↑)"
+            >
+              ◀ 이전
+            </button>
+            <span className="segment-position">{segmentPosition}</span>
+            <button
+              type="button"
+              onClick={() => onNavigate('next')}
+              data-tip="다음 문장으로 이동 (단축키: ↓)"
+            >
+              다음 ▶
+            </button>
+          </div>
         </div>
       </div>
-
-      <button
-        type="button"
-        className={segment.reviewed ? 'reviewed-button checked' : 'reviewed-button'}
-        onClick={handleToggleReviewed}
-        data-tip={segment.reviewed ? '검토 완료 표시를 해제합니다.' : '이 문장을 검토 완료로 표시합니다.'}
-      >
-        {segment.reviewed ? '✓ 검토 완료' : '검토 완료로 표시'}
-      </button>
 
       {(segment.transcription_quality === 'check' || segment.translation_quality === 'check') && (
         <div className="quality-callout">

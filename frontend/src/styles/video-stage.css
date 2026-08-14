@@ -2,47 +2,77 @@
 .video-stage {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   height: 100%;
   min-height: 0;
 }
 
-.video-frame-controls {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.aspect-ratio-select {
+.video-controls-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-frame-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aspect-ratio-select,
+.subtitle-display-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
   color: var(--text);
 }
-.aspect-ratio-select select {
-  padding: 5px 8px;
+.aspect-ratio-select select,
+.subtitle-display-select select {
+  padding: 4px 6px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-h);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
+/* Fixed-size "canvas" - VideoStage sets width/aspect-ratio inline, but it
+   always keeps the same 16:9 footprint regardless of the selected preview
+   ratio. Only .video-frame-inner (below) changes shape, letterboxed/
+   pillarboxed within this constant box - the ratio picker never resizes the
+   frame itself. */
 .video-frame {
-  position: relative;
   margin: 0 auto;
-  /* Fallback sizing when JS hasn't applied the inline aspect-ratio style yet;
-     VideoStage overrides width/height/aspect-ratio inline based on the
-     selected platform ratio (landscape: width-driven, portrait: height-driven). */
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: min(60vh, 100%);
   flex-shrink: 0;
   display: flex;
-  background: #000;
+  align-items: center;
+  justify-content: center;
+  /* Deliberately lighter than .video-frame-inner/.video-player's pure black -
+     otherwise the letterbox/pillarbox bars are indistinguishable from the
+     video's own black background and a ratio change looks like nothing
+     happened (only the subtitle, which visibly repositions, seems to move). */
+  background: #262626;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: var(--shadow);
+}
+
+/* Sized to the selected ratio by VideoStage inline styles; contained within
+   .video-frame's fixed bounds via width/height:100% + max-width/max-height.
+   The border keeps the letterboxed/pillarboxed edge visible even for videos
+   whose own content is dark enough to blend into the frame background. */
+.video-frame-inner {
+  position: relative;
+  overflow: hidden;
+  outline: 1px solid rgba(255, 255, 255, 0.14);
+  outline-offset: -1px;
 }
 
 .video-player {
@@ -87,12 +117,12 @@
   flex-wrap: wrap;
   gap: 6px;
   font-family: var(--mono);
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text-h);
 }
 .timecode-total {
-  font-size: 14px;
+  font-size: 12px;
   opacity: 0.6;
   font-weight: 500;
 }
@@ -138,7 +168,7 @@
 
 .timeline-track {
   position: relative;
-  height: 44px;
+  height: 34px;
   min-width: 100%;
   border-radius: 6px;
   background: var(--code-bg);
@@ -207,7 +237,7 @@
 }
 
 .timeline-detail {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 .timeline-detail-label {
   font-size: 11px;
@@ -223,7 +253,7 @@
 }
 .timeline-detail-track {
   position: relative;
-  height: 32px;
+  height: 24px;
   border-radius: 6px;
   background: var(--code-bg);
   border: 1px solid var(--border);
@@ -256,17 +286,17 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .transport-controls button {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-h);
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
 }
 
@@ -275,29 +305,29 @@
   color: #fff;
   border: none;
   font-weight: 700;
-  padding: 8px 18px;
+  padding: 6px 14px;
 }
 
 .rate-select {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
   color: var(--text);
 }
 .rate-select select {
-  padding: 6px 8px;
+  padding: 5px 6px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .checkbox-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 5px;
+  font-size: 12px;
 }
 

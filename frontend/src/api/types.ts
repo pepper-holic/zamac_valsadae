@@ -97,9 +97,12 @@ export interface ReviewImportResult {
   unknown_segment_ids: string[]
 }
 
+export type TranscribeDevice = 'cuda' | 'cpu'
+
 export interface ModelStatus {
   whisper: Record<string, boolean>
   translation: Record<string, boolean>
+  whisper_device: TranscribeDevice
 }
 
 export interface UndoRedoResult {

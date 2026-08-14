@@ -13,6 +13,7 @@ export const ASPECT_OPTIONS: AspectOption[] = [
 ]
 const DEFAULT_ASPECT_ID = '16:9'
 const ASPECT_STORAGE_KEY = 'zv_previewAspectRatio'
+const OUTER_FRAME_RATIO = 16 / 9
 
 export function useVideoAspectRatio(src: string) {
   const [aspectRatioId, setAspectRatioId] = useState<string>(
@@ -37,10 +38,25 @@ export function useVideoAspectRatio(src: string) {
 
   const selectedAspect = ASPECT_OPTIONS.find((option) => option.id === aspectRatioId) ?? ASPECT_OPTIONS[1]
   const effectiveRatio = selectedAspect.ratio ?? naturalRatio ?? 16 / 9
-  const isPortraitFrame = effectiveRatio < 1
-  const videoFrameStyle: CSSProperties = isPortraitFrame
-    ? { aspectRatio: String(effectiveRatio), height: 'min(60vh, 100%)', width: 'auto', maxWidth: '100%' }
-    : { aspectRatio: String(effectiveRatio), width: '100%', maxHeight: 'min(60vh, 100%)' }
 
-  return { aspectRatioId, setAspectRatioId, videoFrameStyle, handleLoadedMetadata }
+  // The outer frame always keeps the same 16:9 footprint - it's the visible
+  // "canvas" size and doesn't change when the ratio picker changes. Only the
+  // inner content box (letterboxed/pillarboxed within it) reflects the
+  // selected ratio, the way an editor's export-ratio preview usually works.
+  const outerFrameStyle: CSSProperties = {
+    aspectRatio: String(OUTER_FRAME_RATIO),
+    width: '100%',
+    maxHeight: 'min(60vh, 100%)',
+  }
+
+  // Fit the inner box within the fixed outer frame: anything narrower than
+  // the frame's own ratio must be constrained by height (auto-derived width
+  // via aspect-ratio), otherwise a definite width:100% would just inherit
+  // the frame's full width instead of shrinking to the selected ratio.
+  const innerFrameStyle: CSSProperties =
+    effectiveRatio < OUTER_FRAME_RATIO
+      ? { aspectRatio: String(effectiveRatio), height: '100%', width: 'auto', maxWidth: '100%' }
+      : { aspectRatio: String(effectiveRatio), width: '100%', maxHeight: '100%' }
+
+  return { aspectRatioId, setAspectRatioId, outerFrameStyle, innerFrameStyle, handleLoadedMetadata }
 }

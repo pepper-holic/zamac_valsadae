@@ -1,5 +1,5 @@
+import { useState } from 'react'
 import type { Segment, SubtitleStyle } from '../api/types'
-import { formatTimestamp } from '../utils/time'
 import { wrapSubtitleText } from '../utils/subtitleWrap'
 import {
   karaokeHighlightLength,
@@ -8,15 +8,20 @@ import {
   subtitleStyleToCss,
 } from '../utils/subtitleStyle'
 import { ASPECT_OPTIONS, useVideoAspectRatio } from '../hooks/useVideoAspectRatio'
-import { useTimelineZoom } from '../hooks/useTimelineZoom'
-import { Timeline } from './Timeline'
 import { TransportControls } from './TransportControls'
+
+type SubtitleDisplayMode = 'both' | 'original' | 'translation'
+
+const SUBTITLE_DISPLAY_OPTIONS: { id: SubtitleDisplayMode; label: string }[] = [
+  { id: 'both', label: '원문+번역' },
+  { id: 'original', label: '원문만' },
+  { id: 'translation', label: '번역만' },
+]
 
 type Props = {
   videoRef: React.RefObject<HTMLVideoElement | null>
   src: string
   segments: Segment[]
-  selectedSegmentId: string | null
   currentTime: number
   duration: number
   isPlaying: boolean
@@ -26,11 +31,8 @@ type Props = {
   onTimeUpdate: (time: number) => void
   onDurationChange: (duration: number) => void
   onPlayStateChange: (isPlaying: boolean) => void
-  onSeek: (time: number) => void
   onRateChange: (rate: number) => void
   onLoopToggle: () => void
-  onSelectSegment: (segmentId: string) => void
-  onResizeSegment: (segmentId: string, edge: 'start' | 'end', time: number) => Promise<void>
 }
 
 function renderSubtitleText(
@@ -57,7 +59,6 @@ export function VideoStage({
   videoRef,
   src,
   segments,
-  selectedSegmentId,
   currentTime,
   duration,
   isPlaying,
@@ -67,14 +68,12 @@ export function VideoStage({
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
-  onSeek,
   onRateChange,
   onLoopToggle,
-  onSelectSegment,
-  onResizeSegment,
 }: Props) {
-  const { aspectRatioId, setAspectRatioId, videoFrameStyle, handleLoadedMetadata } = useVideoAspectRatio(src)
-  const { zoom, zoomIn, zoomOut, atMin, atMax } = useTimelineZoom()
+  const { aspectRatioId, setAspectRatioId, outerFrameStyle, innerFrameStyle, handleLoadedMetadata } =
+    useVideoAspectRatio(src)
+  const [subtitleDisplayMode, setSubtitleDisplayMode] = useState<SubtitleDisplayMode>('both')
 
   function togglePlay() {
     const video = videoRef.current
@@ -98,93 +97,95 @@ export function VideoStage({
 
   return (
     <section className="video-stage">
-      <div className="video-frame-controls">
-        <label
-          className="aspect-ratio-select"
-          data-tip="플랫폼에 맞춰 미리보기 화면비를 바꿉니다. 원본과 비율이 다르면 남는 영역은 검정으로 채워집니다."
-        >
-          화면비율
-          <select value={aspectRatioId} onChange={(event) => setAspectRatioId(event.target.value)}>
-            {ASPECT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="video-frame" style={videoFrameStyle}>
-        <video
-          ref={videoRef}
-          className="video-player"
-          src={src}
-          onTimeUpdate={(event) => onTimeUpdate(event.currentTarget.currentTime)}
-          onDurationChange={(event) => onDurationChange(event.currentTarget.duration)}
-          onLoadedMetadata={handleLoadedMetadata}
-          onPlay={() => onPlayStateChange(true)}
-          onPause={() => onPlayStateChange(false)}
-        />
-        {activeSegment && (activeSegment.text || activeSegment.translation) && (
-          <div
-            className="subtitle-overlay"
-            style={{
-              ...subtitleContainerStyle(subtitleStyle),
-              opacity: subtitleFadeOpacity(activeSegment, currentTime, subtitleStyle),
-            }}
-          >
-            {activeSegment.translation && (
-              <span
-                className="subtitle-overlay-translation"
+      <div className="video-frame" style={outerFrameStyle}>
+        <div className="video-frame-inner" style={innerFrameStyle}>
+          <video
+            ref={videoRef}
+            className="video-player"
+            src={src}
+            onTimeUpdate={(event) => onTimeUpdate(event.currentTarget.currentTime)}
+            onDurationChange={(event) => onDurationChange(event.currentTarget.duration)}
+            onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => onPlayStateChange(true)}
+            onPause={() => onPlayStateChange(false)}
+          />
+          {activeSegment && (() => {
+            const showOriginal = subtitleDisplayMode !== 'translation' && activeSegment.text
+            const showTranslation = subtitleDisplayMode !== 'original' && activeSegment.translation
+            if (!showOriginal && !showTranslation) return null
+            return (
+              <div
+                className="subtitle-overlay"
                 style={{
-                  ...subtitleStyleToCss(subtitleStyle),
-                  fontSize: `${Math.round(subtitleStyle.font_size * 0.75)}px`,
+                  ...subtitleContainerStyle(subtitleStyle),
+                  opacity: subtitleFadeOpacity(activeSegment, currentTime, subtitleStyle),
                 }}
               >
-                {renderSubtitleText(activeSegment, activeSegment.translation, currentTime, subtitleStyle)}
-              </span>
-            )}
-            <span className="subtitle-overlay-text" style={subtitleStyleToCss(subtitleStyle)}>
-              {renderSubtitleText(activeSegment, activeSegment.text, currentTime, subtitleStyle)}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="timecode">
-        <span className="timecode-current">{formatTimestamp(currentTime)}</span>
-        <span className="timecode-sep">/</span>
-        <span className="timecode-total">{formatTimestamp(duration || 0)}</span>
-        <div className="timeline-zoom-controls" data-tip="타임라인을 확대/축소합니다.">
-          <button type="button" onClick={zoomOut} disabled={atMin} aria-label="타임라인 축소">
-            −
-          </button>
-          <span className="timeline-zoom-level">{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={zoomIn} disabled={atMax} aria-label="타임라인 확대">
-            +
-          </button>
+                {showTranslation && (
+                  <span
+                    className="subtitle-overlay-translation"
+                    style={{
+                      ...subtitleStyleToCss(subtitleStyle),
+                      fontSize: `${Math.round(subtitleStyle.font_size * 0.75)}px`,
+                    }}
+                  >
+                    {renderSubtitleText(activeSegment, showTranslation, currentTime, subtitleStyle)}
+                  </span>
+                )}
+                {showOriginal && (
+                  <span className="subtitle-overlay-text" style={subtitleStyleToCss(subtitleStyle)}>
+                    {renderSubtitleText(activeSegment, showOriginal, currentTime, subtitleStyle)}
+                  </span>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </div>
 
-      <Timeline
-        duration={duration}
-        currentTime={currentTime}
-        segments={segments}
-        selectedSegmentId={selectedSegmentId}
-        zoom={zoom}
-        onSeek={onSeek}
-        onSelectSegment={onSelectSegment}
-        onResizeSegment={onResizeSegment}
-      />
+      <div className="video-controls-row">
+        <TransportControls
+          isPlaying={isPlaying}
+          playbackRate={playbackRate}
+          loopSegment={loopSegment}
+          onTogglePlay={togglePlay}
+          onStep={step}
+          onRateChange={(rate) => onRateChange(rate)}
+          onLoopToggle={onLoopToggle}
+        />
 
-      <TransportControls
-        isPlaying={isPlaying}
-        playbackRate={playbackRate}
-        loopSegment={loopSegment}
-        onTogglePlay={togglePlay}
-        onStep={step}
-        onRateChange={(rate) => onRateChange(rate)}
-        onLoopToggle={onLoopToggle}
-      />
+        <div className="video-frame-controls">
+          <label
+            className="aspect-ratio-select"
+            data-tip="플랫폼에 맞춰 미리보기 화면비를 바꿉니다. 원본과 비율이 다르면 남는 영역은 검정으로 채워집니다."
+          >
+            비율
+            <select value={aspectRatioId} onChange={(event) => setAspectRatioId(event.target.value)}>
+              {ASPECT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label
+            className="subtitle-display-select"
+            data-tip="미리보기에 표시할 자막 종류를 선택합니다."
+          >
+            자막
+            <select
+              value={subtitleDisplayMode}
+              onChange={(event) => setSubtitleDisplayMode(event.target.value as SubtitleDisplayMode)}
+            >
+              {SUBTITLE_DISPLAY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
 
       <p className="keyboard-hint">단축키: Space 재생/일시정지 · ←/→ 1초 이동 · ↑/↓ 이전/다음 문장</p>
     </section>
