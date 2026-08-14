@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { ExportFormat, ExportTextMode, MediaItem, Project } from '../api/types'
+import type { ExportFormat, ExportTextMode, MediaItem, Project, ReviewImportResult } from '../api/types'
 import { cancelItem, exportUrl, renderItem, renderedVideoUrl } from '../api/client'
+import { AiReviewSection } from './AiReviewSection'
 import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
 import { useElapsedSeconds } from '../utils/useElapsedSeconds'
@@ -9,6 +10,10 @@ type Props = {
   project: Project
   item: MediaItem
   onItemUpdated: (item: MediaItem) => void
+  onReviewImported: (result: ReviewImportResult) => void
+  reviewDiffCount: number
+  onAcceptAllReviewDiffs: () => Promise<void>
+  onRejectAllReviewDiffs: () => void
 }
 
 const RENDERABLE_STATUSES = new Set(['transcribed', 'translated', 'rendered', 'error'])
@@ -28,7 +33,15 @@ function triggerDownload(url: string) {
   document.body.removeChild(link)
 }
 
-export function ExportPanel({ project, item, onItemUpdated }: Props) {
+export function ExportPanel({
+  project,
+  item,
+  onItemUpdated,
+  onReviewImported,
+  reviewDiffCount,
+  onAcceptAllReviewDiffs,
+  onRejectAllReviewDiffs,
+}: Props) {
   const [format, setFormat] = useState<ExportFormat>('srt')
   const [selectedModes, setSelectedModes] = useState<Set<ExportTextMode>>(new Set(['original']))
   const [renderUseTranslation, setRenderUseTranslation] = useState(false)
@@ -216,6 +229,15 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
         </div>
       )}
       {item.status === 'error' && item.error && <p className="error-text">{item.error}</p>}
+
+      <AiReviewSection
+        project={project}
+        item={item}
+        onImported={onReviewImported}
+        diffCount={reviewDiffCount}
+        onAcceptAll={onAcceptAllReviewDiffs}
+        onRejectAll={onRejectAllReviewDiffs}
+      />
     </section>
   )
 }

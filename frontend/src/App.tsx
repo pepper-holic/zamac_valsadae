@@ -4,7 +4,6 @@ import { mediaUrl } from './api/client'
 import { GlobalTooltip } from './components/GlobalTooltip'
 import { ProgressToast } from './components/ProgressToast'
 import { HomeView } from './components/home/HomeView'
-import { ReviewPanel } from './components/ReviewPanel'
 import { SegmentDetailPanel } from './components/SegmentDetailPanel'
 import { SegmentList } from './components/SegmentList'
 import { SubtitleStylePanel } from './components/SubtitleStylePanel'
@@ -26,7 +25,6 @@ const TOOL_DESCRIPTIONS: Record<ToolKey, string> = {
   transcribe: 'Whisper로 음성을 인식해 문장 목록을 만듭니다.',
   translate: '추출된 문장을 한↔영으로 번역합니다.',
   style: '글꼴/색상/위치/효과를 설정해 미리보기에 반영합니다.',
-  review: '검수용 파일을 내려받아 AI 챗에서 교정받고 다시 불러옵니다.',
 }
 
 function App() {
@@ -177,6 +175,10 @@ function App() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onGoHome={() => setSelectedProjectId(null)}
+        onReviewImported={handleReviewImported}
+        reviewDiffCount={reviewDiffs.length}
+        onAcceptAllReviewDiffs={handleAcceptAllDiffs}
+        onRejectAllReviewDiffs={handleRejectAllDiffs}
       />
 
       <TaskQueuePanel tasks={activeTasks} onSelectTask={handleSelectTask} />
@@ -232,16 +234,6 @@ function App() {
             )}
             {activeTool === 'style' && (
               <SubtitleStylePanel project={project} onStyleUpdated={handleProjectUpdated} />
-            )}
-            {activeTool === 'review' && (
-              <ReviewPanel
-                project={project}
-                item={item}
-                onImported={handleReviewImported}
-                diffCount={reviewDiffs.length}
-                onAcceptAll={handleAcceptAllDiffs}
-                onRejectAll={handleRejectAllDiffs}
-              />
             )}
           </div>
 

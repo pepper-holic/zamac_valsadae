@@ -76,7 +76,7 @@ const AI_REVIEW_PROMPT = `# 자막 전사·번역 검수 프롬프트 (범용 �
    - 예: "이미 확인된 고유명사 스펠링이 있습니다: A → B"
    - 예: "이 영상의 배경/맥락은 다음과 같습니다: ..."`
 
-export function ReviewPanel({ project, item, onImported, diffCount, onAcceptAll, onRejectAll }: Props) {
+export function AiReviewSection({ project, item, onImported, diffCount, onAcceptAll, onRejectAll }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isPromptVisible, setIsPromptVisible] = useState(false)
@@ -123,11 +123,11 @@ export function ReviewPanel({ project, item, onImported, diffCount, onAcceptAll,
   const hasSegments = item.segments.length > 0
 
   return (
-    <section className="panel">
-      <h2>
+    <div className="review-block">
+      <h3>
         AI 검수 (파일 왕복)
         <PanelHint tip="검수 패키지를 내보내 외부 AI 도구로 검토받고, 그 결과 파일을 다시 불러와 자막에 반영합니다." />
-      </h2>
+      </h3>
       <p className="hint-text">
         검수 패키지를 내려받아 Claude/ChatGPT 등에 직접 업로드해 검수를 받은 뒤, 결과 파일을 다시
         업로드하면 변경 사항이 문장 목록과 상세 검수 패널에 세그먼트별로 표시됩니다. (API 키 불필요)
@@ -200,6 +200,6 @@ export function ReviewPanel({ project, item, onImported, diffCount, onAcceptAll,
           </div>
         </div>
       )}
-    </section>
+    </div>
   )
 }

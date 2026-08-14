@@ -1,4 +1,4 @@
-export type ToolKey = 'transcribe' | 'translate' | 'style' | 'review'
+export type ToolKey = 'transcribe' | 'translate' | 'style'
 
 type RailTab = { key: ToolKey; icon: string; label: string }
 
@@ -6,7 +6,6 @@ const RAIL_TABS: RailTab[] = [
   { key: 'transcribe', icon: '\u{1F399}', label: '전사' },
   { key: 'translate', icon: '\u{1F310}', label: '번역' },
   { key: 'style', icon: 'Aa', label: '스타일' },
-  { key: 'review', icon: '✓', label: 'AI 검수' },
 ]
 
 type Props = {

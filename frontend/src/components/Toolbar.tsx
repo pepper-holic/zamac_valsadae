@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MediaItem, Project } from '../api/types'
+import type { MediaItem, Project, ReviewImportResult } from '../api/types'
 import { deleteProject } from '../api/client'
 import { useAuth } from '../hooks/useAuth'
 import { AboutModal } from './AboutModal'
@@ -42,6 +42,10 @@ type Props = {
   onUndo: () => void
   onRedo: () => void
   onGoHome: () => void
+  onReviewImported: (result: ReviewImportResult) => void
+  reviewDiffCount: number
+  onAcceptAllReviewDiffs: () => Promise<void>
+  onRejectAllReviewDiffs: () => void
 }
 
 export function Toolbar({
@@ -61,6 +65,10 @@ export function Toolbar({
   onUndo,
   onRedo,
   onGoHome,
+  onReviewImported,
+  reviewDiffCount,
+  onAcceptAllReviewDiffs,
+  onRejectAllReviewDiffs,
 }: Props) {
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -373,7 +381,15 @@ export function Toolbar({
 
       {project && item && isExportOpen && (
         <div className="toolbar-dropdown">
-          <ExportPanel project={project} item={item} onItemUpdated={onItemUpdated} />
+          <ExportPanel
+            project={project}
+            item={item}
+            onItemUpdated={onItemUpdated}
+            onReviewImported={onReviewImported}
+            reviewDiffCount={reviewDiffCount}
+            onAcceptAllReviewDiffs={onAcceptAllReviewDiffs}
+            onRejectAllReviewDiffs={onRejectAllReviewDiffs}
+          />
         </div>
       )}
 
