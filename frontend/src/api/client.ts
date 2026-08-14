@@ -1,6 +1,7 @@
 import type {
   AuthStatus,
   ExportFormat,
+  ExportTextMode,
   MediaItem,
   ModelStatus,
   Project,
@@ -329,9 +330,9 @@ export function exportUrl(
   projectId: string,
   itemId: string,
   format: ExportFormat,
-  useTranslation: boolean,
+  mode: ExportTextMode = 'original',
 ): string {
-  return `${API_BASE}/projects/${projectId}/items/${itemId}/export?format=${format}&use_translation=${useTranslation}`
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/export?format=${format}&mode=${mode}`
 }
 
 export function reviewPackageUrl(projectId: string, itemId: string): string {

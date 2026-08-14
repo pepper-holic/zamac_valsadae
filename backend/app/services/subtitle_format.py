@@ -27,29 +27,52 @@ def pick_text(segment: Segment, use_translation: bool) -> str:
     return segment.text
 
 
-def _pick_wrapped_text(segment: Segment, use_translation: bool, style: SubtitleStyle | None) -> str:
+def _pick_wrapped_text(
+    segment: Segment,
+    use_translation: bool,
+    style: SubtitleStyle | None,
+    combined: bool = False,
+) -> str:
+    if combined:
+        original = segment.text
+        translation = segment.translation
+        if style is not None and style.auto_line_break:
+            original = wrap_subtitle_text(original, style.max_line_chars)
+            if translation:
+                translation = wrap_subtitle_text(translation, style.max_line_chars)
+        return f"{original}\n{translation}" if translation else original
     text = pick_text(segment, use_translation)
     if style is not None and style.auto_line_break:
         return wrap_subtitle_text(text, style.max_line_chars)
     return text
 
 
-def to_srt(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
+def to_srt(
+    segments: list[Segment],
+    use_translation: bool = False,
+    style: SubtitleStyle | None = None,
+    combined: bool = False,
+) -> str:
     blocks = []
     for index, segment in enumerate(segments, start=1):
         start = _format_timestamp(segment.start, ",")
         end = _format_timestamp(segment.end, ",")
-        text = _pick_wrapped_text(segment, use_translation, style)
+        text = _pick_wrapped_text(segment, use_translation, style, combined)
         blocks.append(f"{index}\n{start} --> {end}\n{text}\n")
     return "\n".join(blocks)
 
 
-def to_vtt(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
+def to_vtt(
+    segments: list[Segment],
+    use_translation: bool = False,
+    style: SubtitleStyle | None = None,
+    combined: bool = False,
+) -> str:
     lines = ["WEBVTT", ""]
     for segment in segments:
         start = _format_timestamp(segment.start, ".")
         end = _format_timestamp(segment.end, ".")
-        text = _pick_wrapped_text(segment, use_translation, style)
+        text = _pick_wrapped_text(segment, use_translation, style, combined)
         lines.append(f"{start} --> {end}")
         lines.append(text)
         lines.append("")
@@ -72,22 +95,32 @@ Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"""
 
 
-def to_ass(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
+def to_ass(
+    segments: list[Segment],
+    use_translation: bool = False,
+    style: SubtitleStyle | None = None,
+    combined: bool = False,
+) -> str:
     lines = [_ASS_HEADER]
     for segment in segments:
         start = format_ass_timestamp(segment.start)
         end = format_ass_timestamp(segment.end)
-        text = _pick_wrapped_text(segment, use_translation, style).replace("\n", "\\N")
+        text = _pick_wrapped_text(segment, use_translation, style, combined).replace("\n", "\\N")
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
     return "\n".join(lines) + "\n"
 
 
-def to_ttml(segments: list[Segment], use_translation: bool = False, style: SubtitleStyle | None = None) -> str:
+def to_ttml(
+    segments: list[Segment],
+    use_translation: bool = False,
+    style: SubtitleStyle | None = None,
+    combined: bool = False,
+) -> str:
     paragraphs = []
     for segment in segments:
         start = _format_timestamp(segment.start, ".")
         end = _format_timestamp(segment.end, ".")
-        text = escape(_pick_wrapped_text(segment, use_translation, style)).replace("\n", "<br/>")
+        text = escape(_pick_wrapped_text(segment, use_translation, style, combined)).replace("\n", "<br/>")
         paragraphs.append(f'      <p begin="{start}" end="{end}">{text}</p>')
     body = "\n".join(paragraphs)
 

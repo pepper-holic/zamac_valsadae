@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ExportFormat, MediaItem, Project } from '../api/types'
+import type { ExportFormat, ExportTextMode, MediaItem, Project } from '../api/types'
 import { cancelItem, exportUrl, renderItem, renderedVideoUrl } from '../api/client'
 import { PanelHint } from './PanelHint'
 import { formatClock } from '../utils/time'
@@ -13,9 +13,24 @@ type Props = {
 
 const RENDERABLE_STATUSES = new Set(['transcribed', 'translated', 'rendered', 'error'])
 
+const TEXT_MODE_LABELS: Record<ExportTextMode, string> = {
+  original: '원문',
+  translation: '번역문',
+  combined: '합쳐진 자막',
+}
+
+function triggerDownload(url: string) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 export function ExportPanel({ project, item, onItemUpdated }: Props) {
   const [format, setFormat] = useState<ExportFormat>('srt')
-  const [useTranslation, setUseTranslation] = useState(false)
+  const [selectedModes, setSelectedModes] = useState<Set<ExportTextMode>>(new Set(['original']))
   const [renderUseTranslation, setRenderUseTranslation] = useState(false)
   const [cutDeleted, setCutDeleted] = useState(false)
   const [isStartingRender, setIsStartingRender] = useState(false)
@@ -26,6 +41,24 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
   const isRendering = item.status === 'rendering'
   const canStartRender = hasSegments && RENDERABLE_STATUSES.has(item.status) && !isStartingRender
   const elapsedSeconds = useElapsedSeconds(isRendering ? item.started_at : null)
+
+  function toggleMode(mode: ExportTextMode) {
+    setSelectedModes((prev) => {
+      const next = new Set(prev)
+      if (next.has(mode)) {
+        next.delete(mode)
+      } else {
+        next.add(mode)
+      }
+      return next
+    })
+  }
+
+  function handleBulkDownload() {
+    for (const mode of selectedModes) {
+      triggerDownload(exportUrl(project.id, item.id, format, mode))
+    }
+  }
 
   async function handleRender() {
     setIsStartingRender(true)
@@ -67,29 +100,46 @@ export function ExportPanel({ project, item, onItemUpdated }: Props) {
           <option value="ass">ASS</option>
           <option value="ttml">TTML</option>
         </select>
-        {format !== 'json' && (
-          <label
-            className="checkbox-label"
-            data-tip="켜면 번역문을, 끄면 원문을 자막으로 내보냅니다."
-          >
-            <input
-              type="checkbox"
-              checked={useTranslation}
-              disabled={!hasTranslations}
-              onChange={(event) => setUseTranslation(event.target.checked)}
-            />
-            번역문 사용
-          </label>
+        {format !== 'json' && hasSegments && (
+          <>
+            {(Object.keys(TEXT_MODE_LABELS) as ExportTextMode[]).map((mode) => (
+              <label
+                key={mode}
+                className="checkbox-label"
+                data-tip="체크한 항목을 각각 파일로 한 번에 내려받습니다."
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedModes.has(mode)}
+                  disabled={mode !== 'original' && !hasTranslations}
+                  onChange={() => toggleMode(mode)}
+                />
+                {TEXT_MODE_LABELS[mode]}
+              </label>
+            ))}
+          </>
         )}
         {hasSegments ? (
-          <a
-            className="download-button"
-            href={exportUrl(project.id, item.id, format, useTranslation)}
-            download
-            data-tip="선택한 형식으로 파일을 내려받습니다."
-          >
-            다운로드
-          </a>
+          format === 'json' ? (
+            <a
+              className="download-button"
+              href={exportUrl(project.id, item.id, format)}
+              download
+              data-tip="선택한 형식으로 파일을 내려받습니다."
+            >
+              다운로드
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="download-button"
+              onClick={handleBulkDownload}
+              disabled={selectedModes.size === 0}
+              data-tip="체크한 항목을 각각 파일로 한 번에 내려받습니다."
+            >
+              선택 항목 다운로드
+            </button>
+          )
         ) : (
           <span className="hint-text">전사 완료 후 이용 가능</span>
         )}

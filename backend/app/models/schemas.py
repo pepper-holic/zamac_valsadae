@@ -16,6 +16,7 @@ ProjectStatus = Literal[
 TranslationDirection = Literal["ko->en", "en->ko"]
 TranslationEngine = Literal["local", "api"]
 ExportFormat = Literal["srt", "vtt", "json", "ass", "ttml"]
+ExportTextMode = Literal["original", "translation", "combined"]
 QualityFlag = Literal["good", "check"]
 ProgressStage = Literal["downloading_model", "processing", "diarizing", "rendering"]
 

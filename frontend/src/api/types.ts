@@ -12,6 +12,7 @@ export type ProjectStatus =
 export type TranslationDirection = 'ko->en' | 'en->ko'
 export type TranslationEngine = 'local' | 'api'
 export type ExportFormat = 'srt' | 'vtt' | 'json' | 'ass' | 'ttml'
+export type ExportTextMode = 'original' | 'translation' | 'combined'
 
 export type QualityFlag = 'good' | 'check'
 

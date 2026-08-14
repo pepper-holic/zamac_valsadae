@@ -289,10 +289,17 @@
   align-items: center;
   padding: 8px 16px;
   border-radius: 6px;
+  border: none;
   background: var(--accent);
   color: #fff;
   font-weight: 600;
   font-size: 13px;
   text-decoration: none;
+  cursor: pointer;
+}
+
+.download-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 

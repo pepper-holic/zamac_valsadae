@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
 from app.api.deps import get_store
-from app.models.schemas import ExportFormat, MediaItem, Project, RenderRequest
+from app.models.schemas import ExportFormat, ExportTextMode, MediaItem, Project, RenderRequest
 from app.services import cancellation, render_service
 from app.services.progress_reporter import make_progress_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
@@ -22,6 +22,12 @@ _CONTENT_TYPES = {
     "json": "application/json",
     "ass": "text/x-ssa",
     "ttml": "application/ttml+xml",
+}
+
+_FILENAME_SUFFIXES: dict[ExportTextMode, str] = {
+    "original": "",
+    "translation": "_translated",
+    "combined": "_combined",
 }
 
 
@@ -133,23 +139,34 @@ async def export_item(
     project_id: str,
     item_id: str,
     format: ExportFormat = Query("srt"),
-    use_translation: bool = Query(False),
+    mode: ExportTextMode = Query("original"),
     store: ProjectStore = Depends(get_store),
 ) -> Response:
     project, item = _get_project_and_item(project_id, item_id, store)
+    use_translation = mode == "translation"
+    combined = mode == "combined"
 
     if format == "srt":
-        body = to_srt(item.segments, use_translation=use_translation, style=project.subtitle_style)
+        body = to_srt(
+            item.segments, use_translation=use_translation, style=project.subtitle_style, combined=combined
+        )
     elif format == "vtt":
-        body = to_vtt(item.segments, use_translation=use_translation, style=project.subtitle_style)
+        body = to_vtt(
+            item.segments, use_translation=use_translation, style=project.subtitle_style, combined=combined
+        )
     elif format == "ass":
-        body = to_ass(item.segments, use_translation=use_translation, style=project.subtitle_style)
+        body = to_ass(
+            item.segments, use_translation=use_translation, style=project.subtitle_style, combined=combined
+        )
     elif format == "ttml":
-        body = to_ttml(item.segments, use_translation=use_translation, style=project.subtitle_style)
+        body = to_ttml(
+            item.segments, use_translation=use_translation, style=project.subtitle_style, combined=combined
+        )
     else:
         body = json.dumps(to_json(item.segments), ensure_ascii=False, indent=2)
 
-    filename = f"{item.filename.rsplit('.', 1)[0]}.{format}"
+    suffix = _FILENAME_SUFFIXES[mode] if format != "json" else ""
+    filename = f"{item.filename.rsplit('.', 1)[0]}{suffix}.{format}"
     return Response(
         content=body,
         media_type=_CONTENT_TYPES[format],
