@@ -7,6 +7,7 @@ export function useReviewDiffs(
   project: Project | null,
   selectedItemId: string | null,
   handleSegmentSaved: (segment: Segment) => void,
+  handleSegmentsSaved: (segments: Segment[]) => void,
 ) {
   const [reviewDiffs, setReviewDiffs] = useState<ReviewDiffEntry[]>([])
   const [reviewUnknownIds, setReviewUnknownIds] = useState<string[]>([])
@@ -50,9 +51,9 @@ export function useReviewDiffs(
     }
     const updates = [...changesById.entries()].map(([id, update]) => ({ id, update }))
     const updated = await bulkUpdateSegments(project.id, selectedItemId, updates)
-    updated.forEach(handleSegmentSaved)
+    handleSegmentsSaved(updated)
     setReviewDiffs([])
-  }, [project, selectedItemId, reviewDiffs, handleSegmentSaved])
+  }, [project, selectedItemId, reviewDiffs, handleSegmentsSaved])
 
   const handleRejectAllDiffs = useCallback(() => {
     setReviewDiffs([])

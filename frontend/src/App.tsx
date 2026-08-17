@@ -63,6 +63,7 @@ function App() {
     canRedo,
     resetHistory,
     handleSegmentSaved,
+    handleSegmentsSaved,
     handleSegmentDeleted,
     handleSplitSegment,
     handleMergeSegments,
@@ -83,7 +84,7 @@ function App() {
     handleAcceptAllDiffs,
     handleRejectAllDiffs,
     toasts,
-  } = useReviewDiffs(project, selectedItemId, handleSegmentSaved)
+  } = useReviewDiffs(project, selectedItemId, handleSegmentSaved, handleSegmentsSaved)
 
   resetOnProjectLoadRef.current = useCallback(() => {
     resetHistory()

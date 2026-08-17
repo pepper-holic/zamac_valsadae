@@ -36,20 +36,31 @@ export function useSegmentEditing(
 
   const resetHistory = useCallback(() => setHistoryByItem({}), [])
 
-  const handleSegmentSaved = useCallback(
-    (segment: Segment) => {
-      if (!selectedItemId) return
+  // Applies any number of updated segments in a single setProject call -
+  // used directly for batch operations (e.g. accepting a whole AI-review
+  // diff package) instead of calling handleSegmentSaved once per segment,
+  // which would do one O(segments) array scan *and* one re-render per
+  // segment instead of one of each for the whole batch.
+  const handleSegmentsSaved = useCallback(
+    (segments: Segment[]) => {
+      if (!selectedItemId || segments.length === 0) return
+      const bySegmentId = new Map(segments.map((segment) => [segment.id, segment]))
       setProject((prev) =>
         prev
           ? updateItemInProject(prev, selectedItemId, (i) => ({
               ...i,
-              segments: i.segments.map((s) => (s.id === segment.id ? segment : s)),
+              segments: i.segments.map((s) => bySegmentId.get(s.id) ?? s),
             }))
           : prev,
       )
       setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
     },
     [selectedItemId, setProject, setItemHistoryState],
+  )
+
+  const handleSegmentSaved = useCallback(
+    (segment: Segment) => handleSegmentsSaved([segment]),
+    [handleSegmentsSaved],
   )
 
   const handleSegmentDeleted = useCallback(
@@ -100,8 +111,9 @@ export function useSegmentEditing(
       setProject((prev) =>
         prev
           ? updateItemInProject(prev, selectedItemId, (i) => {
-              const insertIndex = i.segments.findIndex((s) => segmentIds.includes(s.id))
-              const remaining = i.segments.filter((s) => !segmentIds.includes(s.id))
+              const idsToMerge = new Set(segmentIds)
+              const insertIndex = i.segments.findIndex((s) => idsToMerge.has(s.id))
+              const remaining = i.segments.filter((s) => !idsToMerge.has(s.id))
               remaining.splice(insertIndex, 0, merged)
               return { ...i, segments: remaining }
             })
@@ -194,6 +206,7 @@ export function useSegmentEditing(
     canRedo,
     resetHistory,
     handleSegmentSaved,
+    handleSegmentsSaved,
     handleSegmentDeleted,
     handleSplitSegment,
     handleMergeSegments,

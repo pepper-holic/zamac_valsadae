@@ -132,6 +132,27 @@ describe('useSegmentEditing', () => {
     expect(result.current.canRedo).toBe(false)
   })
 
+  it('handleSegmentsSaved applies multiple segment updates in one call', () => {
+    const item = makeItem([
+      makeSegment({ id: 'a', text: 'old a' }),
+      makeSegment({ id: 'b', text: 'old b' }),
+      makeSegment({ id: 'c', text: 'old c' }),
+    ])
+    const project = makeProject(item)
+    const { result } = renderHook(() => useHarness(project, 'a'))
+
+    act(() => {
+      result.current.handleSegmentsSaved([
+        makeSegment({ id: 'a', text: 'new a' }),
+        makeSegment({ id: 'c', text: 'new c' }),
+      ])
+    })
+
+    const texts = result.current.project?.items[0].segments.map((s) => s.text)
+    expect(texts).toEqual(['new a', 'old b', 'new c'])
+    expect(result.current.canUndo).toBe(true)
+  })
+
   it('handleSegmentDeleted removes the segment and falls back the selection', () => {
     const item = makeItem([makeSegment({ id: 'a' }), makeSegment({ id: 'b' })])
     const project = makeProject(item)
