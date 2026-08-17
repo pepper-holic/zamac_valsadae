@@ -20,10 +20,8 @@ const MODEL_NOTES: Record<string, string> = {
   base: '빠름 · 정확도 낮음~보통',
   small: '보통 속도 · 정확도 보통~좋음 — 기본 권장',
   medium: '느림 · 정확도 좋음 — 소음/사투리에 강함',
-  large: '매우 느림(CPU) · 정확도 최고',
-  'large-v2': '매우 느림(CPU) · 정확도 최고',
-  'large-v3': '매우 느림(CPU) · 정확도 최고',
-  'large-v3-turbo': '빠름(large-v3 대비 약 5배) · 정확도 거의 동일',
+  'large-v3': '매우 느림(CPU) · 정확도 최고 — 언어 전환/짧은 발화에 turbo보다 안정적',
+  'large-v3-turbo': '빠름(GPU) · 정확도 최고 — 대신 짧은 발화·언어 전환에서 환각 가능성 있음',
 }
 
 export function TranscribePanel({ project, item, onStarted }: Props) {

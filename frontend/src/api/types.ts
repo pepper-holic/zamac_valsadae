@@ -9,8 +9,6 @@ export type ProjectStatus =
   | 'rendered'
   | 'error'
 
-export type TranslationDirection = 'ko->en' | 'en->ko'
-export type TranslationEngine = 'local' | 'api'
 export type ExportFormat = 'srt' | 'vtt' | 'json' | 'ass' | 'ttml'
 export type ExportTextMode = 'original' | 'translation' | 'combined'
 
@@ -101,7 +99,6 @@ export type TranscribeDevice = 'cuda' | 'cpu'
 
 export interface ModelStatus {
   whisper: Record<string, boolean>
-  translation: Record<string, boolean>
   whisper_device: TranscribeDevice
 }
 
@@ -121,8 +118,6 @@ export const WHISPER_MODELS = [
   'base',
   'small',
   'medium',
-  'large',
-  'large-v2',
   'large-v3',
   'large-v3-turbo',
 ] as const

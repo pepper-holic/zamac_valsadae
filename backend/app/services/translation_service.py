@@ -1,240 +1,244 @@
-import re
-import statistics
+import json
+import random
+import time
 from collections.abc import Callable
-from pathlib import Path
-from typing import NamedTuple, Protocol
 
 import httpx
 
 from app.core.config import Settings
-from app.models.schemas import Segment, TranslationDirection
+from app.models.schemas import Segment
 
-class LocalModelConfig(NamedTuple):
-    model_name: str
-    src_lang: str | None = None  # set on the tokenizer for multilingual models
-    target_prefix: str | None = None  # CTranslate2 decoder-side language tag
+# Free-tier / shared relay providers (Gemini free tier, in particular) rate
+# limit aggressively - without a retry, one batch tripping the limit fails
+# the whole translation job even though the request itself was fine.
+_MAX_ATTEMPTS = 5
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_BASE_DELAY_SEC = 1.0
+_MAX_DELAY_SEC = 30.0
 
-
-_LOCAL_MODEL_CONFIGS: dict[TranslationDirection, LocalModelConfig] = {
-    # Plain bilingual MarianMT model - no language tag needed.
-    "ko->en": LocalModelConfig(model_name="Helsinki-NLP/opus-mt-ko-en"),
-    # Helsinki-NLP has no direct bilingual en->ko model; its multi-target
-    # tc-big variant requires an undocumented/unreliable ">>kor<<" tag and
-    # produced garbled output in testing. NLLB-200 is multilingual with a
-    # well-defined language-token API (kor_Hang) and gave correct, natural
-    # translations instead.
-    "en->ko": LocalModelConfig(
-        model_name="facebook/nllb-200-distilled-600M",
-        src_lang="eng_Latn",
-        target_prefix="kor_Hang",
-    ),
-}
-
-_LANGUAGE_NAMES = {"ko": "Korean", "en": "English"}
-
-_HANGUL_PATTERN = re.compile(r"[가-힣ᄀ-ᇿ㄰-㆏]")
-_LATIN_PATTERN = re.compile(r"[A-Za-z]")
+# How many neighboring segments (each side) to include as read-only context
+# around a batch, so nuance decisions aren't blind to what's just outside
+# the batch's own boundaries.
+_WINDOW_SIZE = 6
 
 
-def _already_in_target_language(text: str, target_lang: str) -> bool:
-    """Heuristic for mixed-language videos: skip re-translating a segment that
-    already looks like it's in the target language (e.g. a Korean aside inside
-    an otherwise-English video), based on Hangul vs. Latin letter ratio.
-    """
-    hangul_count = len(_HANGUL_PATTERN.findall(text))
-    latin_count = len(_LATIN_PATTERN.findall(text))
-    letters = hangul_count + latin_count
-    if letters == 0:
-        return True  # no alphabetic content worth translating
-    if target_lang == "ko":
-        return hangul_count / letters >= 0.5
-    if target_lang == "en":
-        return latin_count / letters >= 0.5
-    return False
-
-
-class Translator(Protocol):
-    def translate(self, texts: list[str], direction: TranslationDirection) -> list[str]: ...
-
-
-class LocalTranslator:
-    """Runs local translation models via CTranslate2 (int8) for fast CPU inference.
-
-    Models are converted from the original transformers checkpoint once and
-    cached on disk under `cache_dir`; subsequent runs load the cached
-    CTranslate2 model directly instead of re-converting.
-    """
-
-    def __init__(self, cache_dir: Path, on_stage: Callable[[str], None] | None = None):
-        self._cache_dir = cache_dir
-        self._on_stage = on_stage
-        self._loaded: dict[str, tuple[object, object, str | None]] = {}
-
-    def _model_dir(self, direction: TranslationDirection, model_name: str) -> Path:
-        # Include the model name so switching a direction to a different
-        # model (as happened when tc-big was replaced by NLLB-200) can't
-        # silently reuse a stale CTranslate2 conversion of the old model.
-        safe_model_name = model_name.replace("/", "__")
-        return self._cache_dir / f"{direction.replace('->', '_to_')}__{safe_model_name}"
-
-    def is_cached(self, direction: TranslationDirection) -> bool:
-        config = _LOCAL_MODEL_CONFIGS[direction]
-        return self._model_dir(direction, config.model_name).exists()
-
-    def _get_tokenizer_and_translator(self, direction: TranslationDirection):
-        if direction not in self._loaded:
-            import ctranslate2
-            from ctranslate2.converters import TransformersConverter
-            from transformers import AutoTokenizer
-
-            config = _LOCAL_MODEL_CONFIGS[direction]
-            model_dir = self._model_dir(direction, config.model_name)
-            if not model_dir.exists():
-                if self._on_stage is not None:
-                    self._on_stage("downloading_model")
-                TransformersConverter(config.model_name).convert(
-                    str(model_dir), quantization="int8"
-                )
-
-            tokenizer_kwargs = {"src_lang": config.src_lang} if config.src_lang else {}
-            tokenizer = AutoTokenizer.from_pretrained(config.model_name, **tokenizer_kwargs)
-            ct2_translator = ctranslate2.Translator(str(model_dir))
-            self._loaded[direction] = (tokenizer, ct2_translator, config.target_prefix)
-            if self._on_stage is not None:
-                self._on_stage("processing")
-        return self._loaded[direction]
-
-    def translate(self, texts: list[str], direction: TranslationDirection) -> list[str]:
-        outputs, _scores = self._translate(texts, direction, with_scores=False)
-        return outputs
-
-    def translate_with_scores(
-        self, texts: list[str], direction: TranslationDirection
-    ) -> tuple[list[str], list[float | None]]:
-        return self._translate(texts, direction, with_scores=True)
-
-    def _translate(
-        self, texts: list[str], direction: TranslationDirection, with_scores: bool
-    ) -> tuple[list[str], list[float | None]]:
-        if not texts:
-            return [], []
-        tokenizer, ct2_translator, target_prefix_token = self._get_tokenizer_and_translator(
-            direction
-        )
-        tokenized = [tokenizer.convert_ids_to_tokens(tokenizer.encode(text)) for text in texts]
-        target_prefix = (
-            [[target_prefix_token] for _ in texts] if target_prefix_token else None
-        )
-        results = ct2_translator.translate_batch(
-            tokenized, target_prefix=target_prefix, return_scores=with_scores
-        )
-        outputs = []
-        scores: list[float | None] = []
-        for result in results:
-            hypothesis = result.hypotheses[0]
-            token_ids = tokenizer.convert_tokens_to_ids(hypothesis)
-            outputs.append(tokenizer.decode(token_ids, skip_special_tokens=True))
-            if with_scores and result.scores:
-                # normalize the cumulative log-prob by length so segments of
-                # different lengths remain comparable to each other
-                scores.append(result.scores[0] / max(len(hypothesis), 1))
-            else:
-                scores.append(None)
-        return outputs, scores
+def _retry_delay_seconds(attempt: int, retry_after_header: str | None) -> float:
+    if retry_after_header:
+        try:
+            return float(retry_after_header)
+        except ValueError:
+            pass
+    delay = min(_BASE_DELAY_SEC * (2**attempt), _MAX_DELAY_SEC)
+    return delay + random.uniform(0, delay * 0.25)
 
 
 class ApiTranslator:
+    """Calls an OpenAI-compatible chat endpoint to translate segments.
+
+    Combines STT-error correction and translation into a single call (same
+    intent as the manual AI-검수 prompt in review_service.py) instead of a
+    separate review pass, so API users get both without a second round trip.
+    """
+
     def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1"):
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
 
-    def translate(self, texts: list[str], direction: TranslationDirection) -> list[str]:
+    def translate_with_correction(
+        self,
+        texts: list[str],
+        glossary: dict[str, str] | None = None,
+        context: str | None = None,
+        window_before: list[str] | None = None,
+        window_after: list[str] | None = None,
+    ) -> tuple[list[str], list[str]]:
         if not texts:
-            return []
+            return [], []
 
-        source, target = direction.split("->")
-        prompt = (
-            f"Translate each numbered line from {_LANGUAGE_NAMES[source]} to {_LANGUAGE_NAMES[target]}. "
-            "Reply with only the translated lines, same order, same numbering, no extra commentary.\n\n"
-            + "\n".join(f"{index + 1}. {text}" for index, text in enumerate(texts))
-        )
+        prompt = _build_prompt(texts, glossary, context, window_before, window_after)
 
-        response = httpx.post(
-            f"{self._base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0,
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
+        response = self._post_chat_completion(prompt)
         content = response.json()["choices"][0]["message"]["content"]
-        return _parse_numbered_lines(content, expected_count=len(texts))
+        return _parse_json_items(content, expected_count=len(texts))
 
+    def extract_context(self, texts: list[str]) -> str:
+        """One cheap call over the whole file's raw text to get a topic
+        summary and recurring proper nouns/terms, so every batch call below
+        can stay consistent without re-sending the whole file every time.
+        """
+        if not texts:
+            return ""
 
-def _parse_numbered_lines(content: str, expected_count: int) -> list[str]:
-    lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
-    parsed = []
-    for line in lines:
-        _, _, rest = line.partition(".")
-        parsed.append(rest.strip() if rest else line)
-    if len(parsed) != expected_count:
-        raise ValueError(
-            f"API translation returned {len(parsed)} lines, expected {expected_count}"
+        prompt = (
+            "Below is the full text of a video's subtitles (Korean and/or English, "
+            "possibly with STT errors), in order. In 3-5 sentences, note: (1) the "
+            "topic/genre of the video, (2) recurring proper nouns, names, or jargon "
+            "and how they should be spelled/translated consistently. Be concise - "
+            "this will be reused as background context for translating the file in "
+            "batches, not shown to an end user. Reply with plain text only, no JSON, "
+            "no markdown.\n\n" + "\n".join(texts)
         )
-    return parsed
+        response = self._post_chat_completion(prompt)
+        return response.json()["choices"][0]["message"]["content"].strip()
+
+    def _post_chat_completion(self, prompt: str) -> httpx.Response:
+        response: httpx.Response | None = None
+        for attempt in range(_MAX_ATTEMPTS):
+            response = httpx.post(
+                f"{self._base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0,
+                },
+                timeout=60,
+            )
+            if response.status_code not in _RETRYABLE_STATUS_CODES:
+                break
+            if attempt < _MAX_ATTEMPTS - 1:
+                time.sleep(_retry_delay_seconds(attempt, response.headers.get("Retry-After")))
+        response.raise_for_status()
+        return response
 
 
-def get_translator(
-    engine: str,
-    settings: Settings,
-    on_stage: Callable[[str], None] | None = None,
-    session_token: str | None = None,
-) -> Translator:
-    if engine == "local":
-        return LocalTranslator(cache_dir=settings.ct2_model_cache_dir, on_stage=on_stage)
-    if engine == "api":
-        # A logged-in session routes through our hosted relay (which holds
-        # its own provider key server-side) instead of requiring the user to
-        # supply their own TRANSLATION_API_KEY.
-        if session_token:
-            return ApiTranslator(api_key=session_token, base_url=settings.hosted_relay_base_url)
-        if not settings.translation_api_key:
-            raise ValueError("API 번역을 사용하려면 로그인하거나 TRANSLATION_API_KEY 설정이 필요합니다.")
-        base_url = settings.translation_api_base_url or "https://api.openai.com/v1"
-        return ApiTranslator(api_key=settings.translation_api_key, base_url=base_url)
-    raise ValueError(f"알 수 없는 번역 엔진: {engine}")
+def _build_prompt(
+    texts: list[str],
+    glossary: dict[str, str] | None,
+    context: str | None = None,
+    window_before: list[str] | None = None,
+    window_after: list[str] | None = None,
+) -> str:
+    glossary_block = ""
+    if glossary:
+        terms = "\n".join(f"- {source} → {target}" for source, target in glossary.items() if source)
+        if terms:
+            glossary_block = (
+                "\nWhenever one of these source terms appears, use exactly the given "
+                f"translation for it:\n{terms}\n"
+            )
+
+    context_block = ""
+    if context:
+        context_block = f"\nBackground context for this video, for consistency:\n{context}\n"
+
+    window_block = ""
+    if window_before or window_after:
+        parts = []
+        if window_before:
+            parts.append(
+                "Immediately preceding lines, for context only - do NOT translate "
+                "or include these in your output:\n"
+                + "\n".join(f"- {t}" for t in window_before)
+            )
+        if window_after:
+            parts.append(
+                "Immediately following lines, for context only - do NOT translate "
+                "or include these in your output:\n"
+                + "\n".join(f"- {t}" for t in window_after)
+            )
+        window_block = "\n" + "\n\n".join(parts) + "\n"
+
+    return (
+        "You are correcting speech-to-text output and translating it. This app only "
+        "handles Korean and English, so for each numbered line below:\n"
+        "1. Detect whether the line is Korean or English. If a line has no "
+        "translatable content (symbols only, empty, non-verbal), leave both the "
+        "corrected text and translation identical to the original line.\n"
+        "2. Fix obvious STT misrecognitions/typos in the source line if you spot any "
+        "(keep the same language and meaning - do not rephrase for style). "
+        "Leave low-confidence proper nouns/jargon as-is rather than guessing.\n"
+        "3. Produce a natural, idiomatic translation into the OTHER of the two "
+        "languages (Korean lines translate to English, English lines translate to "
+        "Korean). If a line is already a mix of both or already reads naturally in "
+        "the other language, use your judgment on the most useful translation.\n"
+        "4. Use the surrounding context below (if given) to pick the right nuance - "
+        "e.g. a short line like an interjection or a repeated phrase may need a "
+        "different translation depending on what comes right before/after it.\n"
+        f"{glossary_block}"
+        f"{context_block}"
+        f"{window_block}\n"
+        "Reply with ONLY a JSON object of this exact shape, no markdown fences, no "
+        'commentary: {"items": [{"text": "<corrected source>", "translation": '
+        '"<translation>"}, ...]}. The items array must have exactly '
+        f"{len(texts)} entries, in the same order as the input - the lines to "
+        "translate now are:\n\n"
+        + "\n".join(f"{index + 1}. {text}" for index, text in enumerate(texts))
+    )
 
 
-_LOW_SCORE_STDEV_MULTIPLIER = 1.5
-_MIN_SEGMENTS_FOR_RELATIVE_QUALITY = 3
+def _parse_json_items(content: str, expected_count: int) -> tuple[list[str], list[str]]:
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        cleaned = cleaned.removeprefix("json").strip()
+    try:
+        parsed = json.loads(cleaned)
+        items = parsed["items"]
+        texts = [str(item["text"]) for item in items]
+        translations = [str(item["translation"]) for item in items]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f"API translation returned unparseable content: {content!r}") from exc
+    if len(items) != expected_count:
+        raise ValueError(
+            f"API translation returned {len(items)} items, expected {expected_count}"
+        )
+    return texts, translations
+
+
+def get_translator(settings: Settings, session_token: str | None = None) -> ApiTranslator:
+    # A logged-in session routes through our hosted relay (which holds its
+    # own provider key server-side) instead of requiring the user to supply
+    # their own TRANSLATION_API_KEY.
+    if session_token:
+        return ApiTranslator(api_key=session_token, base_url=settings.hosted_relay_base_url)
+    if not settings.translation_api_key:
+        raise ValueError("번역을 사용하려면 로그인하거나 TRANSLATION_API_KEY 설정이 필요합니다.")
+    base_url = settings.translation_api_base_url or "https://api.openai.com/v1"
+    return ApiTranslator(api_key=settings.translation_api_key, base_url=base_url)
 
 
 class TranslationCancelled(Exception):
     """Raised mid-translate when the caller's should_cancel() reports True."""
 
 
-def _apply_glossary(text: str, glossary: dict[str, str]) -> str:
-    """Best-effort glossary enforcement: if a registered source term slipped
-    through untranslated (common for names/jargon local models don't know),
-    replace it with the project's chosen translation. This cannot force a
-    model to phrase things a specific way when it *did* translate the term,
-    only patch the common case where it left the term as-is.
+def _translate_batch_with_retry(
+    translator: ApiTranslator,
+    batch_texts: list[str],
+    glossary: dict[str, str] | None,
+    context: str,
+    window_before: list[str],
+    window_after: list[str],
+) -> tuple[list[str], list[str]]:
+    """A larger batch gives the API more chances to emit malformed JSON -
+    most often an unescaped double quote inside a translated line of
+    dialogue breaking the surrounding JSON string. On a parse failure,
+    retry as two smaller batches (each with the other half as extra local
+    context) instead of failing the whole batch - this isolates whichever
+    half (and eventually which single line) is actually causing trouble,
+    instead of one bad line taking the rest of the batch down with it.
     """
-    for source_term, target_term in glossary.items():
-        if source_term:
-            text = text.replace(source_term, target_term)
-    return text
+    try:
+        return translator.translate_with_correction(batch_texts, glossary, context, window_before, window_after)
+    except ValueError:
+        if len(batch_texts) <= 1:
+            raise
+        mid = len(batch_texts) // 2
+        left_texts, right_texts = batch_texts[:mid], batch_texts[mid:]
+        left_corrected, left_translations = _translate_batch_with_retry(
+            translator, left_texts, glossary, context, window_before, right_texts
+        )
+        right_corrected, right_translations = _translate_batch_with_retry(
+            translator, right_texts, glossary, context, left_texts, window_after
+        )
+        return left_corrected + right_corrected, left_translations + right_translations
 
 
 def translate_segments(
     segments: list[Segment],
-    direction: TranslationDirection,
-    translator: Translator,
+    translator: ApiTranslator,
     on_progress: Callable[[float], None] | None = None,
-    batch_size: int = 8,
+    batch_size: int = 24,
     should_cancel: Callable[[], bool] | None = None,
     glossary: dict[str, str] | None = None,
     translation_memory: dict[str, str] | None = None,
@@ -242,7 +246,6 @@ def translate_segments(
     if not segments:
         return []
 
-    target_lang = direction.split("->")[1]
     total = len(segments)
     updated: list[Segment | None] = [None] * total
     pending_indices: list[int] = []
@@ -250,10 +253,10 @@ def translate_segments(
     tm = translation_memory or {}
 
     for index, segment in enumerate(segments):
-        if _already_in_target_language(segment.text, target_lang):
-            updated[index] = segment.model_copy(update={"translation": segment.text})
-        elif segment.text in tm:
-            # 이전에 같은 원문을 번역한 적이 있으면 모델 호출 없이 재사용합니다.
+        if segment.text in tm:
+            # 이전에 같은 원문을 번역한 적이 있으면 모델 호출 없이 재사용합니다
+            # (이미 나온 API 응답을 그대로 재사용하는 것일 뿐, 번역이 필요한지
+            # 자체를 판단하는 것은 아님 - 그 판단은 전부 프롬프트를 통해 LLM이 함).
             updated[index] = segment.model_copy(
                 update={"translation": tm[segment.text], "translation_quality": "good"}
             )
@@ -265,9 +268,14 @@ def translate_segments(
     if on_progress and done_count:
         on_progress(min(done_count / total, 1.0))
 
-    supports_scores = hasattr(translator, "translate_with_scores")
+    corrected_text_by_index: dict[int, str] = {}
     translations_by_index: dict[int, str] = {}
-    scores_by_index: dict[int, float | None] = {}
+
+    # 배치 하나가 볼 수 있는 문맥은 그 배치 안 문장들뿐이라, 같은 문장이 배치
+    # 경계 너머 다른 문맥에서 반복될 때 뉘앙스를 놓칠 수 있다. 파일 전체를
+    # 매번 보내는 대신 (1) 파일당 1회만 도는 저렴한 주제/고유명사 요약과
+    # (2) 배치 앞뒤 몇 문장씩의 슬라이딩 윈도우로 그 손실을 보완한다.
+    context = translator.extract_context([segment.text for segment in segments]) if pending_segments else ""
 
     for start in range(0, len(pending_segments), batch_size):
         if should_cancel is not None and should_cancel():
@@ -275,47 +283,30 @@ def translate_segments(
         batch = pending_segments[start : start + batch_size]
         batch_indices = pending_indices[start : start + batch_size]
         batch_texts = [segment.text for segment in batch]
-        if supports_scores:
-            translations, scores = translator.translate_with_scores(batch_texts, direction)
-        else:
-            translations = translator.translate(batch_texts, direction)
-            scores = [None] * len(translations)
-        for index, translation, score in zip(batch_indices, translations, scores):
-            if glossary:
-                translation = _apply_glossary(translation, glossary)
+        window_before = [s.text for s in pending_segments[max(0, start - _WINDOW_SIZE) : start]]
+        window_after = [
+            s.text for s in pending_segments[start + batch_size : start + batch_size + _WINDOW_SIZE]
+        ]
+        # STT 오탈자 교정 + 번역을 한 번의 호출로 함께 받는다 (수동 AI 검수
+        # 패키지 왕복을 없애기 위함) - review_service.py의 검수 프롬프트와
+        # 같은 의도를 번역 API 요청에 합쳐 넣은 것. 용어집 강제 치환도 로컬
+        # 후처리가 아니라 프롬프트에 지시사항으로 실어서 LLM이 반영하게 한다.
+        corrected_texts, translations = _translate_batch_with_retry(
+            translator, batch_texts, glossary, context, window_before, window_after
+        )
+        for index, corrected_text, translation in zip(batch_indices, corrected_texts, translations):
+            corrected_text_by_index[index] = corrected_text
             translations_by_index[index] = translation
-            scores_by_index[index] = score
         done_count += len(batch)
         if on_progress:
             on_progress(min(done_count / total, 1.0))
 
-    # Flag segments whose translation confidence is a clear outlier relative
-    # to the rest of *this* project - there's no universal "good" absolute
-    # score across models/content, but a segment translated much less
-    # confidently than its neighbors is worth a second look.
-    valid_scores = [s for s in scores_by_index.values() if s is not None]
-    low_score_threshold = None
-    if len(valid_scores) >= _MIN_SEGMENTS_FOR_RELATIVE_QUALITY:
-        mean = statistics.mean(valid_scores)
-        stdev = statistics.pstdev(valid_scores)
-        low_score_threshold = mean - _LOW_SCORE_STDEV_MULTIPLIER * stdev
-
     for index in pending_indices:
         segment = segments[index]
-        score = scores_by_index[index]
-        quality: str | None = None
-        reason: str | None = None
-        if score is not None:
-            if low_score_threshold is not None and score < low_score_threshold:
-                quality = "check"
-                reason = "이 프로젝트의 다른 문장들에 비해 번역 신뢰도가 낮습니다"
-            else:
-                quality = "good"
         updated[index] = segment.model_copy(
             update={
+                "text": corrected_text_by_index[index],
                 "translation": translations_by_index[index],
-                "translation_quality": quality,
-                "translation_quality_reason": reason,
             }
         )
 

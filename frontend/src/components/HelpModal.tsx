@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom'
+
 type Props = {
   onClose: () => void
 }
@@ -7,11 +9,12 @@ const MODEL_SIZES = [
   { size: 'base', speed: '빠름', accuracy: '낮음~보통', note: '짧고 명료한 음성엔 쓸만함.' },
   { size: 'small', speed: '보통', accuracy: '보통~좋음', note: '속도/정확도 균형. 기본 권장.' },
   { size: 'medium', speed: '느림', accuracy: '좋음', note: '배경 소음/사투리에 더 강함.' },
-  { size: 'large / large-v2 / v3', speed: '매우 느림 (CPU)', accuracy: '최고', note: 'GPU 없으면 영상 길이만큼 오래 걸릴 수 있음.' },
+  { size: 'large-v3', speed: '매우 느림 (CPU)', accuracy: '최고', note: '언어 전환/짧은 발화가 많은 소스는 turbo보다 안정적.' },
+  { size: 'large-v3-turbo', speed: '빠름 (GPU)', accuracy: '최고', note: 'large-v3보다 빠르지만 짧은 발화·언어 전환에서 환각 가능성 있음.' },
 ]
 
 export function HelpModal({ onClose }: Props) {
-  return (
+  return createPortal(
     <div className="help-overlay" onClick={onClose}>
       <div className="help-modal" onClick={(event) => event.stopPropagation()}>
         <div className="help-header">
@@ -28,7 +31,7 @@ export function HelpModal({ onClose }: Props) {
               <li>상단 <b>+ 업로드</b>로 영상/오디오 파일을 올립니다. 여러 개를 한 번에 올리면 새 프로젝트 하나에 파일마다 별도로 담겨 관리됩니다.</li>
               <li>같은 시리즈의 다른 영상을 추가하려면, 프로젝트를 선택한 상태에서 <b>+ 파일 추가</b>를 누르세요. 파일 선택 드롭다운에서 작업할 파일을 전환할 수 있습니다.</li>
               <li><b>전사</b> 탭에서 Whisper 모델 크기를 골라 자막을 추출합니다. (여러 파일을 한 번에 올렸다면 자동으로 순서대로 전사됩니다.)</li>
-              <li><b>번역</b> 탭에서 방향(한→영/영→한)과 엔진을 골라 번역을 붙입니다. 용어집은 프로젝트 안의 모든 파일이 함께 씁니다.</li>
+              <li><b>번역</b> 탭에서 번역 시작을 누르면 붙습니다(로그인 또는 API 키 필요, 언어는 자동 감지). 용어집은 프로젝트 안의 모든 파일이 함께 씁니다.</li>
               <li>가운데 문장 목록에서 클릭 → 오른쪽 패널에서 시작/종료 시간, 원문, 번역문을 수정합니다.</li>
               <li><b>내보내기</b>에서 SRT/VTT 파일을 받거나, 같은 패널의 <b>AI 검수</b> 섹션으로 교정을 받습니다. (현재 선택한 파일 기준입니다.)</li>
             </ol>
@@ -200,14 +203,10 @@ export function HelpModal({ onClose }: Props) {
                     없이도 동작합니다.</td>
                 </tr>
                 <tr>
-                  <td className="mono">번역 — 로컬 모델</td>
-                  <td>Whisper와 동일하게 완전히 로컬에서 처리됩니다.</td>
-                </tr>
-                <tr>
-                  <td className="mono">번역 — API 엔진</td>
-                  <td><code>TRANSLATION_API_KEY</code>를 직접 설정했을 때만 활성화되는
-                    선택 사항입니다. 이 경우 번역할 문장 텍스트가 설정한 API 엔드포인트로
-                    전송됩니다(영상/오디오 원본은 전송되지 않음).</td>
+                  <td className="mono">번역</td>
+                  <td>로그인하면 서버가 대신 보관한 API 키로, 또는 <code>TRANSLATION_API_KEY</code>를
+                    직접 설정했다면 그 키로 처리됩니다. 문장 텍스트가 해당 API로 전송되어
+                    원문 교정과 번역을 함께 받아옵니다(영상/오디오 원본은 전송되지 않음).</td>
                 </tr>
                 <tr>
                   <td className="mono">AI 검수</td>
@@ -229,9 +228,9 @@ export function HelpModal({ onClose }: Props) {
             <table className="help-table">
               <tbody>
                 <tr>
-                  <td className="mono">모델 다운로드가 멈춘 것 같음</td>
+                  <td className="mono">Whisper 모델 다운로드가 멈춘 것 같음</td>
                   <td>
-                    Whisper/번역 모델은 최초 1회만 자동 다운로드되며 크기에 따라 수 분이 걸릴 수
+                    Whisper 모델은 최초 1회만 자동 다운로드되며 크기에 따라 수 분이 걸릴 수
                     있습니다. 진행바가 인디터미네이트(불확정) 상태로 오래 유지되면 네트워크 연결을
                     확인하세요. 중단 후 다시 시작해도 이미 받은 부분은 다시 받지 않습니다.
                   </td>
@@ -273,6 +272,7 @@ export function HelpModal({ onClose }: Props) {
           </section>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

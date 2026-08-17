@@ -405,24 +405,17 @@ def test_models_status_reports_uncached_models(client):
         "base",
         "small",
         "medium",
-        "large",
-        "large-v2",
         "large-v3",
         "large-v3-turbo",
     }
-    assert set(body["translation"]) == {"ko->en", "en->ko"}
     assert all(isinstance(cached, bool) for cached in body["whisper"].values())
     assert body["whisper_device"] in ("cuda", "cpu")
-    assert all(isinstance(cached, bool) for cached in body["translation"].values())
 
 
 def test_translate_requires_existing_segments(client):
     ctx = _create_project_with_item(client)
 
-    response = client.post(
-        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
-        json={"direction": "ko->en"},
-    )
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate")
 
     assert response.status_code == 400
 
@@ -439,22 +432,24 @@ def test_translate_fills_translation_field(client, monkeypatch):
     )
 
     class FakeTranslator:
-        def translate(self, texts, direction):
-            return [f"[{direction}] {t}" for t in texts]
+        def translate_with_correction(
+            self, texts, glossary=None, context=None, window_before=None, window_after=None
+        ):
+            return texts, [f"[translated] {t}" for t in texts]
+
+        def extract_context(self, texts):
+            return ""
 
     monkeypatch.setattr(
         "app.api.translate.translation_service.get_translator", lambda *a, **k: FakeTranslator()
     )
 
-    response = client.post(
-        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
-        json={"direction": "ko->en", "engine": "local"},
-    )
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate")
     assert response.status_code == 200
 
     item = client.get(f"/projects/{ctx['project_id']}").json()["items"][0]
     assert item["status"] == "translated"
-    assert item["segments"][0]["translation"] == "[ko->en] 안녕"
+    assert item["segments"][0]["translation"] == "[translated] 안녕"
 
 
 def test_translate_passes_logged_in_session_token_to_get_translator(client, monkeypatch):
@@ -471,8 +466,13 @@ def test_translate_passes_logged_in_session_token_to_get_translator(client, monk
     )
 
     class FakeTranslator:
-        def translate(self, texts, direction):
-            return [f"[{direction}] {t}" for t in texts]
+        def translate_with_correction(
+            self, texts, glossary=None, context=None, window_before=None, window_after=None
+        ):
+            return texts, [f"[translated] {t}" for t in texts]
+
+        def extract_context(self, texts):
+            return ""
 
     captured = {}
 
@@ -484,10 +484,7 @@ def test_translate_passes_logged_in_session_token_to_get_translator(client, monk
 
     auth_state.set_session(access_token="user-jwt", email="a@b.com")
     try:
-        response = client.post(
-            f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate",
-            json={"direction": "ko->en", "engine": "api"},
-        )
+        response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate")
     finally:
         auth_state.clear_session()
 
