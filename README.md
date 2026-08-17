@@ -1,14 +1,16 @@
 # Zamak_Valsadae (자막발사대)
 
-영상/오디오 파일에서 Whisper로 자막을 추출하고, 타임라인에서 싱크를 맞추고, 한↔영 번역을 붙이고, API 키 없이 파일을 주고받는 방식으로 AI 검수를 받을 수 있는 로컬 웹 도구입니다.
+영상/오디오 파일에서 Whisper로 자막을 추출하고, 타임라인에서 싱크를 맞추고, 한↔영 번역(원문 교정 포함)을
+붙이는 로컬 웹 도구입니다. 전사는 완전히 로컬에서 처리되고, 번역은 로그인(서버 제공 API 키) 또는
+`TRANSLATION_API_KEY` 설정을 통해 OpenAI 호환 API로 처리됩니다.
 
 ## 개요
 
 - 백엔드: FastAPI + Whisper + CTranslate2
 - 프론트엔드: React + TypeScript + Vite
-- 로컬에서 전체 전사/번역/편집/내보내기/검수 워크플로우를 처리합니다.
-- `data/`에 모델 캐시와 프로젝트 데이터를 저장하며, 실행 시 자동으로 필요한 모델을 변환하고 캐시합니다.
-- Whisper/번역 모델은 각 방향·크기별로 최초 1회만 자동 다운로드되며, 전사/번역 화면에 다운로드 여부와
+- 전사/편집/내보내기는 로컬에서, 번역은 API를 통해 처리합니다.
+- `data/`에 모델 캐시와 프로젝트 데이터를 저장하며, 실행 시 자동으로 Whisper 모델을 다운로드하고 캐시합니다.
+- Whisper 모델은 크기별로 최초 1회만 자동 다운로드되며, 전사 화면에 다운로드 여부와
   진행 상황("모델 다운로드 중" / "처리 중")이 표시됩니다.
 
 ## 빠른 시작 (Windows 사용자를 위한 권장 방법 — 설치형 포터블 패키지)
@@ -88,7 +90,7 @@ npm run dev
 
 - `backend/` — FastAPI 앱, 서비스 로직, 모델 스키마, 테스트
 - `frontend/` — React 애플리케이션, 타입 정의, 컴포넌트
-- `data/` — 번역 모델 캐시(`ct2models/`), Whisper 모델 캐시(`whisper_models/`), 프로젝트 저장소(`projects/`)
+- `data/` — Whisper 모델 캐시(`whisper_models/`), 프로젝트 저장소(`projects/`)
 - `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
 - `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
 - `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
@@ -116,13 +118,13 @@ npm run dev
 
 ### 모델 다운로드 상태 표시
 
-- `GET /models/status` — Whisper 모델 크기별, 번역 방향별로 이미 다운로드되어 있는지 여부와
+- `GET /models/status` — Whisper 모델 크기별로 이미 다운로드되어 있는지 여부와
   Whisper 전사에 실제 사용될 장치(`whisper_device`: `"cuda"` | `"cpu"`)를 반환합니다.
-  프론트엔드는 전사/번역 시작 전에 이 값을 조회해 "✓ 다운로드됨" / "⬇ 다운로드 필요" 배지와
+  프론트엔드는 전사 시작 전에 이 값을 조회해 "✓ 다운로드됨" / "⬇ 다운로드 필요" 배지와
   "🚀 GPU(CUDA) 감지됨" / "🖥 GPU 미감지" 배지를 보여줍니다.
-- 전사/번역 실행 중에는 `Project.stage` 값(`downloading_model` | `processing`)에 따라 진행 표시가
+- 전사 실행 중에는 `Project.stage` 값(`downloading_model` | `processing`)에 따라 진행 표시가
   달라집니다. 모델을 처음 받는 동안은 불확정(인디터미네이트) 진행바가, 실제 처리 중에는 퍼센트 진행바가
-  표시됩니다.
+  표시됩니다. 번역은 언어를 자동 감지해 API로 처리되므로 모델 다운로드 단계가 없습니다.
 
 ### GPU 가속 (선택, Windows)
 
@@ -172,10 +174,9 @@ npm run test
 
 | 변수 | 설명 |
 |---|---|
-| `TRANSLATION_API_KEY` | 설정 시 번역 엔진에서 "API" 옵션 사용 가능 (OpenAI 호환 chat completions) |
+| `TRANSLATION_API_KEY` | 로그인 없이 번역을 쓰려면 설정 (OpenAI 호환 chat completions). 로그인 세션이 있으면 대신 서버 릴레이를 통해 처리되므로 불필요 |
 | `TRANSLATION_API_BASE_URL` | 기본값 `https://api.openai.com/v1`. 호환 엔드포인트로 교체 가능 |
 | `APP_DATA_DIR` | 업로드/프로젝트/모델 캐시 저장 위치. 기본값: 프로젝트 루트의 `data/` |
-| `CT2_MODEL_CACHE_DIR` | 번역(CTranslate2) 모델 캐시 위치. 기본값: `data/ct2models/` |
 | `WHISPER_MODEL_CACHE_DIR` | Whisper 음성 인식 모델 캐시 위치. 기본값: `data/whisper_models/` (프로젝트 로컬 — 사용자 홈 폴더가 아님) |
 | `VITE_API_BASE_URL` | 프론트엔드 개발 환경에서 사용할 백엔드 URL. `frontend/.env.development`에서 관리됩니다. |
 | `HF_TOKEN` | 화자 분리 기능(선택)에 필요. HuggingFace 토큰이며, [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) 모델 이용약관에 먼저 동의해야 합니다. 설정하지 않으면 화자 분리 없이 전사만 진행됩니다. |
@@ -200,15 +201,9 @@ npm run test
 모든 모델은 사용자 홈 폴더가 아닌 이 프로젝트의 `data/` 아래에만 저장됩니다 — `data/` 폴더를
 지우면 모델 캐시까지 함께 깨끗이 삭제됩니다.
 
-### 번역 모델
-
-- **한→영**: `Helsinki-NLP/opus-mt-ko-en`
-- **영→한**: `facebook/nllb-200-distilled-600M` (언어 태그 `kor_Hang` 사용)
-- 최초 실행 시 CTranslate2 int8 포맷으로 변환 후 `data/ct2models/`에 캐시됩니다.
-
 ### Whisper 모델
 
-- `tiny` ~ `large-v3`, `large-v3-turbo` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
+- `tiny` / `base` / `small` / `medium` / `large-v3` / `large-v3-turbo` 중 선택한 크기만 최초 전사 실행 시 다운로드됩니다.
 - `data/whisper_models/`에 캐시됩니다 (`WHISPER_MODEL_CACHE_DIR`로 위치 변경 가능).
 
 ## 버그 리포트 / 기능 요청
