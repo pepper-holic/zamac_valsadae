@@ -185,7 +185,14 @@ def _merge_adjacent_regions(regions: list[LanguageRegion]) -> list[LanguageRegio
         )
         if can_merge:
             prev_start, _prev_end, prev_language, prev_probability, prev_second = merged[-1]
-            merged[-1] = (prev_start, end, prev_language, min(prev_probability, probability), prev_second)
+            # Carry forward the weaker part's own second_language along with
+            # its probability - keeping prev_second unconditionally would
+            # silently drop the incoming region's runner-up language even
+            # when it's the incoming region that's actually less confident.
+            if prev_probability <= probability:
+                merged[-1] = (prev_start, end, prev_language, prev_probability, prev_second)
+            else:
+                merged[-1] = (prev_start, end, prev_language, probability, second_language)
         else:
             merged.append((start, end, language, probability, second_language))
     return merged
