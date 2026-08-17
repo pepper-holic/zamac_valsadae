@@ -13,8 +13,6 @@ ProjectStatus = Literal[
     "error",
 ]
 
-TranslationDirection = Literal["ko->en", "en->ko"]
-TranslationEngine = Literal["local", "api"]
 ExportFormat = Literal["srt", "vtt", "json", "ass", "ttml"]
 ExportTextMode = Literal["original", "translation", "combined"]
 QualityFlag = Literal["good", "check"]
@@ -111,11 +109,6 @@ class TranscribeRequest(BaseModel):
     multilingual: bool = False
 
 
-class TranslateRequest(BaseModel):
-    direction: TranslationDirection
-    engine: TranslationEngine = "local"
-
-
 class GlossaryUpdate(BaseModel):
     glossary: dict[str, str] = Field(default_factory=dict)
 
@@ -185,6 +178,19 @@ class ReviewPackage(BaseModel):
     segments: list[ReviewSegment] = Field(default_factory=list)
 
 
+class CompactReviewGroup(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    text: str = ""
+    translation: str | None = None
+
+
+class CompactReviewPackage(BaseModel):
+    item_id: str
+    media_filename: str
+    instructions: str
+    groups: list[CompactReviewGroup] = Field(default_factory=list)
+
+
 class ReviewDiffEntry(BaseModel):
     id: str
     field: str  # Literal 제약 완화로 동적 필드 지원 및 파싱 실패 방지
@@ -199,7 +205,6 @@ class ReviewImportResult(BaseModel):
 
 class ModelStatus(BaseModel):
     whisper: dict[str, bool] = Field(default_factory=dict)
-    translation: dict[str, bool] = Field(default_factory=dict)
     whisper_device: TranscribeDevice = "cpu"
 
 

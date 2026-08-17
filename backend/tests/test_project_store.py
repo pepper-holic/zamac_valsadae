@@ -101,34 +101,41 @@ def test_get_missing_project_raises(store):
 def test_load_translation_memory_missing_returns_empty_dict(store):
     project = store.create_project()
 
-    assert store.load_translation_memory(project.id, "ko->en") == {}
+    assert store.load_translation_memory(project.id) == {}
 
 
 def test_save_and_load_translation_memory_round_trips(store):
     project = store.create_project()
 
-    store.save_translation_memory(project.id, "ko->en", {"안녕": "Hi"})
+    store.save_translation_memory(project.id, {"안녕": "Hi"})
 
-    assert store.load_translation_memory(project.id, "ko->en") == {"안녕": "Hi"}
+    assert store.load_translation_memory(project.id) == {"안녕": "Hi"}
 
 
 def test_save_translation_memory_merges_with_existing_entries(store):
     project = store.create_project()
-    store.save_translation_memory(project.id, "ko->en", {"안녕": "Hi"})
+    store.save_translation_memory(project.id, {"안녕": "Hi"})
 
-    store.save_translation_memory(project.id, "ko->en", {"반가워": "Nice to meet you"})
+    store.save_translation_memory(project.id, {"반가워": "Nice to meet you"})
 
-    assert store.load_translation_memory(project.id, "ko->en") == {
+    assert store.load_translation_memory(project.id) == {
         "안녕": "Hi",
         "반가워": "Nice to meet you",
     }
 
 
-def test_translation_memory_is_scoped_by_direction(store):
+def test_load_translation_memory_migrates_and_merges_legacy_direction_files(store):
     project = store.create_project()
-    store.save_translation_memory(project.id, "ko->en", {"안녕": "Hi"})
+    project_dir = store._project_dir(project.id)
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "tm_ko_to_en.json").write_text('{"안녕": "Hi"}', encoding="utf-8")
+    (project_dir / "tm_en_to_ko.json").write_text('{"Hello": "안녕하세요"}', encoding="utf-8")
 
-    assert store.load_translation_memory(project.id, "en->ko") == {}
+    memory = store.load_translation_memory(project.id)
+
+    assert memory == {"안녕": "Hi", "Hello": "안녕하세요"}
+    # migration should persist to the new single-file cache
+    assert (project_dir / "tm.json").exists()
 
 
 def test_save_persists_updates(store):

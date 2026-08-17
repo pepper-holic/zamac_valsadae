@@ -6,14 +6,19 @@ from fastapi.responses import Response
 from app.api.deps import get_store
 from app.models.schemas import ReviewImportResult
 from app.services.project_store import ProjectNotFoundError, ProjectStore
-from app.services.review_service import build_review_package, diff_review_import
+from app.services.review_service import (
+    build_compact_review_package,
+    build_review_package,
+    diff_compact_review_import,
+    diff_review_import,
+)
 
 router = APIRouter(prefix="/projects", tags=["review"])
 
 
 @router.get("/{project_id}/items/{item_id}/review-package")
 async def get_review_package(
-    project_id: str, item_id: str, store: ProjectStore = Depends(get_store)
+    project_id: str, item_id: str, compact: bool = False, store: ProjectStore = Depends(get_store)
 ) -> Response:
     try:
         project = store.get(project_id)
@@ -23,11 +28,18 @@ async def get_review_package(
     if item is None:
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
 
-    package = build_review_package(
-        item_id=item.id, media_filename=item.filename, segments=item.segments
-    )
+    if compact:
+        package = build_compact_review_package(
+            item_id=item.id, media_filename=item.filename, segments=item.segments
+        )
+        filename = f"{item.filename.rsplit('.', 1)[0]}-review-compact.json"
+    else:
+        package = build_review_package(
+            item_id=item.id, media_filename=item.filename, segments=item.segments
+        )
+        filename = f"{item.filename.rsplit('.', 1)[0]}-review.json"
+
     body = package.model_dump_json(indent=2)
-    filename = f"{item.filename.rsplit('.', 1)[0]}-review.json"
     return Response(
         content=body,
         media_type="application/json",
@@ -52,6 +64,10 @@ async def import_review_package(
         payload = json.loads(raw_bytes)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="유효한 JSON 파일이 아닙니다.") from exc
+
+    imported_groups = payload.get("groups")
+    if imported_groups is not None:
+        return diff_compact_review_import(item.segments, imported_groups)
 
     imported_segments = payload.get("segments", payload if isinstance(payload, list) else [])
     return diff_review_import(item.segments, imported_segments)

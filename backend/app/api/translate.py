@@ -5,36 +5,31 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.api.deps import get_store
 from app.core.config import get_settings
-from app.models.schemas import MediaItem, TranslateRequest
+from app.models.schemas import MediaItem
 from app.services import auth_state, cancellation, readability_service, translation_service
-from app.services.progress_reporter import make_progress_reporter, make_stage_reporter
+from app.services.progress_reporter import make_progress_reporter
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 
 router = APIRouter(prefix="/projects", tags=["translate"])
 logger = logging.getLogger(__name__)
 
 
-def _run_translation(
-    project_id: str, item_id: str, request: TranslateRequest, store: ProjectStore
-) -> None:
+def _run_translation(project_id: str, item_id: str, store: ProjectStore) -> None:
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
     try:
         session = auth_state.get_session()
         translator = translation_service.get_translator(
-            request.engine,
             get_settings(),
-            on_stage=make_stage_reporter(project, item, store),
             session_token=session.access_token if session else None,
         )
-        # 용어집은 프로젝트(파일 모음) 전체에서 공유하지만, 번역 메모리는 같은
-        # 프로젝트 안에서 반복 번역되는 문장을 재사용하기 위한 것이라 방향별로
-        # 프로젝트 단위로 캐시합니다(파일 단위가 아님) - 시리즈 안의 다른 파일과도
-        # 재사용됩니다.
-        translation_memory = store.load_translation_memory(project_id, request.direction)
+        # 용어집은 프로젝트(파일 모음) 전체에서 공유하며, 번역 메모리도 같은
+        # 프로젝트 안에서 반복 번역되는 문장을 재사용하기 위해 프로젝트
+        # 단위로 캐시합니다(파일 단위가 아님) - 시리즈 안의 다른 파일과도
+        # 재사용됩니다. 언어를 자동 감지해서 번역하므로 방향 구분은 없습니다.
+        translation_memory = store.load_translation_memory(project_id)
         translated_segments = translation_service.translate_segments(
             item.segments,
-            direction=request.direction,
             translator=translator,
             on_progress=make_progress_reporter(project, item, store),
             should_cancel=lambda: cancellation.is_cancelled(item_id),
@@ -43,7 +38,6 @@ def _run_translation(
         )
         store.save_translation_memory(
             project_id,
-            request.direction,
             {
                 segment.text: segment.translation
                 for segment in translated_segments
@@ -79,7 +73,6 @@ def _run_translation(
 async def translate_item(
     project_id: str,
     item_id: str,
-    request: TranslateRequest,
     background_tasks: BackgroundTasks,
     store: ProjectStore = Depends(get_store),
 ) -> MediaItem:
@@ -101,5 +94,5 @@ async def translate_item(
     item.error = None
     store.save(project)
 
-    background_tasks.add_task(_run_translation, project_id, item_id, request, store)
+    background_tasks.add_task(_run_translation, project_id, item_id, store)
     return item

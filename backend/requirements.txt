@@ -6,9 +6,6 @@ pydantic>=2.9
 # 데스크톱 창(WebView2 기반) - Chrome 브라우저 탭 대신 네이티브 프로그램 창으로 UI를 띄웁니다.
 pywebview>=5.3
 faster-whisper>=1.0.3
-transformers>=4.45
-sentencepiece>=0.2
-sacremoses>=0.1
 ctranslate2>=4.4
 
 # 화자 분리(선택 기능) - HuggingFace 게이트 모델이라 사용 전 HF_TOKEN 설정과

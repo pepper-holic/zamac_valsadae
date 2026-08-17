@@ -106,15 +106,15 @@ try {
 
     Remove-Item -Path $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
 
-    # --- Backend Python packages (faster-whisper, ctranslate2, transformers -
-    # a GB or so, first run can take a while). Whisper/translation model
-    # weights are NOT downloaded here - they are fetched lazily on first
-    # transcribe/translate, with progress shown in the app UI. ---
+    # --- Backend Python packages (faster-whisper, ctranslate2, pyannote-audio -
+    # a GB or so, first run can take a while). Whisper model weights are NOT
+    # downloaded here - they are fetched lazily on first transcribe, with
+    # progress shown in the app UI. ---
     #
     # --no-cache-dir + a short PIP_TMPDIR avoid Windows' 260-char MAX_PATH
     # install failures: pip's cache/build dirs default to nested paths under
     # this repo (already long once cloned into e.g. Documents\...), and
-    # ctranslate2/transformers ship deeply-nested wheel contents that can
+    # ctranslate2/pyannote-audio ship deeply-nested wheel contents that can
     # exceed the limit before ever reaching the destination site-packages.
     Write-Step "[4/5] Installing backend Python packages (about 1-2 GB, first run can take a while)..."
     $PipTmpDir = "C:\ct-pip-tmp"

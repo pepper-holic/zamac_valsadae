@@ -13,6 +13,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 backend/desktop_error.log
+backend/app.log
 install.log
 
 # VS Code / Copilot session metadata

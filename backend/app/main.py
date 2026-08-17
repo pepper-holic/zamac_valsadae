@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -7,6 +8,21 @@ from fastapi.staticfiles import StaticFiles
 from app.api import auth, export, models, projects, review, segments, transcribe, translate
 from app.api.deps import get_store
 from app.services.project_store import ProjectStore
+
+# Nothing else in the app configures logging, so app.* loggers (whisper_service's
+# per-region transcription progress, etc.) fall through to Python's WARNING-level
+# "handler of last resort" and never show up - INFO-level progress needs an
+# explicit level+handler to actually reach it. The desktop build
+# (app/desktop.py) runs under pythonw.exe with no console at all, so
+# sys.stderr is None there and a console-only handler would silently produce
+# nothing visible - a file next to desktop_error.log is what actually lets
+# the user open and read it regardless of how the app was launched.
+LOG_FILE_PATH = Path(__file__).resolve().parents[1] / "app.log"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")],
+)
 
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 

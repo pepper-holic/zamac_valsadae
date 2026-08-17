@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { AuthActionResult } from '../hooks/useAuth'
 
 type Props = {
@@ -33,7 +34,7 @@ export function AuthModal({ onClose, signIn, signUp }: Props) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="help-overlay" onClick={onClose}>
       <div className="help-modal" onClick={(event) => event.stopPropagation()}>
         <div className="help-header">
@@ -89,6 +90,7 @@ export function AuthModal({ onClose, signIn, signUp }: Props) {
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

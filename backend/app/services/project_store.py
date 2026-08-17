@@ -169,13 +169,30 @@ class ProjectStore:
     def can_redo(self, item_id: str) -> bool:
         return bool(self._redo.get(item_id))
 
-    def _translation_memory_path(self, project_id: str, direction: str) -> Path:
-        safe_direction = direction.replace("->", "_to_")
-        return self._project_dir(project_id) / f"tm_{safe_direction}.json"
+    def _translation_memory_path(self, project_id: str) -> Path:
+        return self._project_dir(project_id) / "tm.json"
 
-    def load_translation_memory(self, project_id: str, direction: str) -> dict[str, str]:
-        tm_path = self._translation_memory_path(project_id, direction)
+    def _legacy_translation_memory_paths(self, project_id: str) -> list[Path]:
+        # 방향별(ko->en / en->ko)로 나뉘어 있던 이전 캐시 파일 - 번역이 언어를
+        # 자동 감지하는 방식으로 바뀌면서 방향 구분이 없어졌으므로, 처음
+        # 읽을 때 하나로 합쳐서 새 tm.json으로 옮긴다.
+        project_dir = self._project_dir(project_id)
+        return [project_dir / "tm_ko_to_en.json", project_dir / "tm_en_to_ko.json"]
+
+    def load_translation_memory(self, project_id: str) -> dict[str, str]:
+        tm_path = self._translation_memory_path(project_id)
         if not tm_path.exists():
+            merged: dict[str, str] = {}
+            for legacy_path in self._legacy_translation_memory_paths(project_id):
+                if not legacy_path.exists():
+                    continue
+                try:
+                    merged.update(json.loads(legacy_path.read_text(encoding="utf-8")))
+                except json.JSONDecodeError:
+                    continue
+            if merged:
+                self.save_translation_memory(project_id, merged)
+                return merged
             return {}
         try:
             return json.loads(tm_path.read_text(encoding="utf-8"))
@@ -183,11 +200,9 @@ class ProjectStore:
             # 손상된 TM 파일이 번역 자체를 막지 않도록 빈 메모리로 취급
             return {}
 
-    def save_translation_memory(
-        self, project_id: str, direction: str, entries: dict[str, str]
-    ) -> None:
-        tm_path = self._translation_memory_path(project_id, direction)
-        existing = self.load_translation_memory(project_id, direction)
+    def save_translation_memory(self, project_id: str, entries: dict[str, str]) -> None:
+        tm_path = self._translation_memory_path(project_id)
+        existing = json.loads(tm_path.read_text(encoding="utf-8")) if tm_path.exists() else {}
         merged = {**existing, **entries}
         tm_path.parent.mkdir(parents=True, exist_ok=True)
         tm_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")

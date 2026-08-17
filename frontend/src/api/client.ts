@@ -8,8 +8,6 @@ import type {
   ReviewImportResult,
   Segment,
   SubtitleStyle,
-  TranslationDirection,
-  TranslationEngine,
   UndoRedoResult,
 } from './types'
 
@@ -93,16 +91,9 @@ export async function transcribeItem(
   return parseOrThrow<MediaItem>(response)
 }
 
-export async function translateItem(
-  projectId: string,
-  itemId: string,
-  direction: TranslationDirection,
-  engine: TranslationEngine,
-): Promise<MediaItem> {
+export async function translateItem(projectId: string, itemId: string): Promise<MediaItem> {
   const response = await fetch(`${API_BASE}/projects/${projectId}/items/${itemId}/translate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ direction, engine }),
   })
   return parseOrThrow<MediaItem>(response)
 }
@@ -335,8 +326,9 @@ export function exportUrl(
   return `${API_BASE}/projects/${projectId}/items/${itemId}/export?format=${format}&mode=${mode}`
 }
 
-export function reviewPackageUrl(projectId: string, itemId: string): string {
-  return `${API_BASE}/projects/${projectId}/items/${itemId}/review-package`
+export function reviewPackageUrl(projectId: string, itemId: string, compact = false): string {
+  const query = compact ? '?compact=true' : ''
+  return `${API_BASE}/projects/${projectId}/items/${itemId}/review-package${query}`
 }
 
 export async function importReviewPackage(
