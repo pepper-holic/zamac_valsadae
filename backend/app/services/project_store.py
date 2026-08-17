@@ -4,6 +4,7 @@ import threading
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import BinaryIO
 from pydantic import ValidationError
 
 from app.models.schemas import MediaItem, MediaItemStatus, Project, ProjectStatusSummary, Segment
@@ -59,12 +60,22 @@ class ProjectStore:
         self.save(project)
         return project
 
-    def add_item(self, project_id: str, filename: str, media_bytes: bytes) -> MediaItem:
+    def add_item(self, project_id: str, filename: str, media_bytes: bytes | BinaryIO) -> MediaItem:
+        """Accepts either raw bytes (tests, small in-memory payloads) or a
+        binary file-like object (the real upload path) - a stream is
+        copied to disk in chunks via shutil.copyfileobj instead of being
+        fully buffered in memory first, which matters once uploads reach
+        video-file sizes (hundreds of MB to a few GB).
+        """
         project = self.get(project_id)
         item_id = uuid.uuid4().hex
         media_file = self.media_path(project_id, item_id)
         media_file.parent.mkdir(parents=True, exist_ok=True)
-        media_file.write_bytes(media_bytes)
+        if isinstance(media_bytes, bytes):
+            media_file.write_bytes(media_bytes)
+        else:
+            with media_file.open("wb") as destination:
+                shutil.copyfileobj(media_bytes, destination)
 
         item = MediaItem(
             id=item_id, filename=filename, media_path=str(media_file), status="uploaded"

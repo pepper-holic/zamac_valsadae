@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from app.api.deps import get_store
@@ -133,9 +134,16 @@ async def add_item(
 ) -> MediaItem:
     if not file.filename:
         raise HTTPException(status_code=400, detail="파일명이 필요합니다.")
-    media_bytes = await file.read()
+    # file.file is the underlying sync SpooledTemporaryFile - store.add_item
+    # streams it to disk in chunks rather than buffering the whole upload
+    # into a `bytes` object first, and the copy itself runs in a worker
+    # thread so a multi-GB video doesn't block the event loop (and every
+    # other in-flight request, including status polls) for the seconds it
+    # takes to write.
     try:
-        return store.add_item(project_id, filename=file.filename, media_bytes=media_bytes)
+        return await run_in_threadpool(
+            store.add_item, project_id, filename=file.filename, media_bytes=file.file
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
 

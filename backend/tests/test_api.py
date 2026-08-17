@@ -84,6 +84,25 @@ def test_add_item_appends_to_project(client):
     assert [i["id"] for i in reloaded["items"]] == [item["id"]]
 
 
+def test_add_item_streams_upload_content_to_disk_intact(client, store):
+    # add_item now writes the upload via shutil.copyfileobj instead of
+    # buffering it into a `bytes` object first - assert the file on disk
+    # actually matches what was uploaded, not just that the request
+    # succeeded.
+    project = _create_project(client)
+    payload = b"not-really-audio-but-large-enough" * 1000
+
+    response = client.post(
+        f"/projects/{project['id']}/items",
+        files={"file": ("clip.wav", payload, "audio/wav")},
+    )
+    assert response.status_code == 200
+    item = response.json()
+
+    media_path = store.media_path(project["id"], item["id"])
+    assert media_path.read_bytes() == payload
+
+
 def test_add_multiple_items_are_managed_separately(client):
     project = _create_project(client)
     first = _add_item(client, project["id"], filename="a.wav")
