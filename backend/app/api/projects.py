@@ -8,6 +8,7 @@ from app.models.schemas import (
     NamedSubtitleStyle,
     Project,
     ProjectCreate,
+    ProjectStatusSummary,
     StylePresetCreate,
     SubtitleStyle,
 )
@@ -40,6 +41,21 @@ async def list_projects(store: ProjectStore = Depends(get_store)) -> list[Projec
 async def get_project(project_id: str, store: ProjectStore = Depends(get_store)) -> Project:
     try:
         return store.get(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    except ProjectCorruptedError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/status", response_model=ProjectStatusSummary)
+async def get_project_status(
+    project_id: str, store: ProjectStore = Depends(get_store)
+) -> ProjectStatusSummary:
+    """Lightweight polling target for progress bars - status/progress/stage
+    per item, without segments/words. See get_project() for the full
+    document (segments included) once a job actually finishes."""
+    try:
+        return store.get_status(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
     except ProjectCorruptedError as exc:

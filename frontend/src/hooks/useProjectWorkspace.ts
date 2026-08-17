@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { addItem, createProject, deleteItem, getProject, listProjects } from '../api/client'
-import type { MediaItem, Project, ProjectStatus } from '../api/types'
+import { addItem, createProject, deleteItem, getProject, getProjectStatus, listProjects } from '../api/client'
+import type { MediaItem, Project, ProjectStatus, ProjectStatusSummary } from '../api/types'
 import type { QueuedTask } from '../components/TaskQueuePanel'
 import { projectLabel, updateItemInProject } from '../utils/projectHelpers'
 
@@ -67,14 +67,73 @@ export function useProjectWorkspace(onProjectLoaded: () => void) {
 
   // 진행 중인 작업이 하나라도 있으면 해당 프로젝트들을 주기적으로 다시 불러와
   // 진행률/완료 여부를 갱신합니다 - 지금 보고 있는 파일이 아니어도 동작합니다.
+  //
+  // 매 틱마다 프로젝트 전체(세그먼트/단어 포함)를 다시 받아오는 대신, 상태
+  // 값만 담긴 가벼운 엔드포인트를 폴링합니다 - 자막이 많은 파일일수록 매번
+  // 수백 KB~1MB를 다시 파싱/전송하는 낭비가 커지고, 그때마다 세그먼트 배열의
+  // identity가 바뀌면서 화면 전체가 다시 렌더링됩니다. 실제 세그먼트 결과가
+  // 필요한 시점(전사/번역/렌더링이 막 끝난 시점)에만 해당 프로젝트를 한 번
+  // 전체로 다시 불러옵니다.
   useEffect(() => {
     if (activeTasks.length === 0) return
     const projectIds = Array.from(new Set(activeTasks.map((t) => t.projectId)))
+    // Snapshot of which items were active when this interval was set up -
+    // used below to detect a status transition purely from the poll
+    // response, without reading back potentially-stale React state inside
+    // the interval callback (a setState functional updater isn't guaranteed
+    // to run synchronously, so a "did it change" flag set as a side effect
+    // inside one couldn't be read reliably right after).
+    const trackedItemIds = new Set(activeTasks.map((t) => t.item.id))
     const interval = setInterval(async () => {
       // 한 프로젝트 조회가 실패해도(일시적 오류, 다른 탭에서의 삭제 등) 나머지
       // 활성 프로젝트들의 진행률 갱신까지 함께 누락되지 않도록 개별적으로 처리합니다.
-      const results = await Promise.allSettled(projectIds.map((id) => getProject(id)))
-      const refreshed = results
+      const results = await Promise.allSettled(projectIds.map((id) => getProjectStatus(id)))
+      const statuses = results
+        .filter((r): r is PromiseFulfilledResult<ProjectStatusSummary> => r.status === 'fulfilled')
+        .map((r) => r.value)
+      if (statuses.length === 0) return
+
+      const needsFullRefetch = new Set<string>()
+      for (const summary of statuses) {
+        for (const status of summary.items) {
+          if (trackedItemIds.has(status.id) && !ACTIVE_STATUSES.has(status.status)) {
+            // 전사/번역/렌더링이 막 끝났거나 실패함 - 실제 결과(세그먼트)를
+            // 반영하려면 이 프로젝트는 한 번 전체로 다시 불러와야 합니다.
+            needsFullRefetch.add(summary.id)
+          }
+        }
+      }
+
+      const mergeStatus = (p: Project): Project => {
+        const summary = statuses.find((s) => s.id === p.id)
+        if (!summary) return p
+        let changed = false
+        const items = p.items.map((item) => {
+          const status = summary.items.find((s) => s.id === item.id)
+          if (!status) return item
+          if (
+            item.status === status.status &&
+            item.progress === status.progress &&
+            item.stage === status.stage &&
+            item.error === status.error &&
+            item.started_at === status.started_at
+          ) {
+            return item
+          }
+          changed = true
+          return { ...item, ...status }
+        })
+        return changed ? { ...p, items } : p
+      }
+
+      setProjects((prev) => prev.map(mergeStatus))
+      setProject((prev) => (prev ? mergeStatus(prev) : prev))
+
+      if (needsFullRefetch.size === 0) return
+      const fullResults = await Promise.allSettled(
+        Array.from(needsFullRefetch).map((id) => getProject(id)),
+      )
+      const refreshed = fullResults
         .filter((r): r is PromiseFulfilledResult<Project> => r.status === 'fulfilled')
         .map((r) => r.value)
       if (refreshed.length === 0) return

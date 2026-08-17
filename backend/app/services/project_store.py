@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from pydantic import ValidationError
 
-from app.models.schemas import MediaItem, Project, Segment
+from app.models.schemas import MediaItem, MediaItemStatus, Project, ProjectStatusSummary, Segment
 
 
 class ProjectNotFoundError(Exception):
@@ -101,6 +101,36 @@ class ProjectStore:
             if item.id == item_id:
                 return item
         raise ItemNotFoundError(item_id)
+
+    def get_status(self, project_id: str) -> ProjectStatusSummary:
+        """Cheap alternative to get() for polling during a long-running job -
+        parses the raw JSON directly and picks out only the status fields,
+        skipping Pydantic's per-Segment/per-Word validation (the dominant
+        cost once a file has any real transcript, since a poll runs every
+        ~1.5s for the whole duration of a transcription/translation/render).
+        """
+        metadata_path = self._metadata_path(project_id)
+        if not metadata_path.exists():
+            raise ProjectNotFoundError(project_id)
+
+        try:
+            raw = json.loads(metadata_path.read_text(encoding="utf-8"))
+            return ProjectStatusSummary(
+                id=project_id,
+                items=[
+                    MediaItemStatus(
+                        id=item.get("id", ""),
+                        status=item.get("status", "uploaded"),
+                        error=item.get("error"),
+                        progress=item.get("progress"),
+                        stage=item.get("stage"),
+                        started_at=item.get("started_at"),
+                    )
+                    for item in raw.get("items", [])
+                ],
+            )
+        except (json.JSONDecodeError, ValidationError, AttributeError) as e:
+            raise ProjectCorruptedError(f"프로젝트 메타데이터를 파싱할 수 없습니다: {project_id}") from e
 
     def save(self, project: Project) -> None:
         metadata_path = self._metadata_path(project.id)

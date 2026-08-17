@@ -5,6 +5,7 @@ import type {
   MediaItem,
   ModelStatus,
   Project,
+  ProjectStatusSummary,
   ReviewImportResult,
   Segment,
   SubtitleStyle,
@@ -62,6 +63,14 @@ export async function listProjects(): Promise<Project[]> {
 export async function getProject(projectId: string): Promise<Project> {
   const response = await fetch(`${API_BASE}/projects/${projectId}`)
   return parseOrThrow<Project>(response)
+}
+
+// Lightweight polling target - status/progress/stage per item, no
+// segments/words. Used to refresh progress bars without re-fetching (and
+// re-rendering) a whole potentially-large transcript every tick.
+export async function getProjectStatus(projectId: string): Promise<ProjectStatusSummary> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/status`)
+  return parseOrThrow<ProjectStatusSummary>(response)
 }
 
 export function mediaUrl(projectId: string, itemId: string): string {

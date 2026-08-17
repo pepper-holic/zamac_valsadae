@@ -74,6 +74,20 @@ export interface NamedSubtitleStyle {
   style: SubtitleStyle
 }
 
+export interface MediaItemStatus {
+  id: string
+  status: ProjectStatus
+  error: string | null
+  progress: number | null
+  stage: ProgressStage | null
+  started_at: number | null
+}
+
+export interface ProjectStatusSummary {
+  id: string
+  items: MediaItemStatus[]
+}
+
 export interface Project {
   id: string
   name: string

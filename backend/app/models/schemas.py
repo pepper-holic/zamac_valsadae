@@ -85,6 +85,23 @@ class MediaItem(BaseModel):
     rendered_path: str | None = None
 
 
+class MediaItemStatus(BaseModel):
+    """Lightweight view of a MediaItem's processing state - everything a
+    progress poll needs, without the (potentially large) segments/words."""
+
+    id: str
+    status: ProjectStatus = "uploaded"
+    error: str | None = None
+    progress: float | None = None
+    stage: ProgressStage | None = None
+    started_at: float | None = None
+
+
+class ProjectStatusSummary(BaseModel):
+    id: str
+    items: list[MediaItemStatus] = Field(default_factory=list)
+
+
 class Project(BaseModel):
     id: str
     name: str = ""

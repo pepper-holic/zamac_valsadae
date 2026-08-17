@@ -1,13 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MediaItem, Project } from '../api/types'
+import type { MediaItem, Project, ProjectStatusSummary } from '../api/types'
 import { useProjectWorkspace } from './useProjectWorkspace'
 
-const { addItem, createProject, deleteItem, getProject, listProjects } = vi.hoisted(() => ({
+const { addItem, createProject, deleteItem, getProject, getProjectStatus, listProjects } = vi.hoisted(() => ({
   addItem: vi.fn(),
   createProject: vi.fn(),
   deleteItem: vi.fn(),
   getProject: vi.fn(),
+  getProjectStatus: vi.fn(),
   listProjects: vi.fn(),
 }))
 
@@ -16,6 +17,7 @@ vi.mock('../api/client', () => ({
   createProject,
   deleteItem,
   getProject,
+  getProjectStatus,
   listProjects,
 }))
 
@@ -167,5 +169,85 @@ describe('useProjectWorkspace', () => {
 
     expect(result.current.project?.items.map((i) => i.id)).toEqual(['b'])
     expect(result.current.selectedItemId).toBe('b')
+  })
+
+  function statusOf(item: MediaItem): ProjectStatusSummary['items'][number] {
+    return {
+      id: item.id,
+      status: item.status,
+      error: item.error,
+      progress: item.progress,
+      stage: item.stage,
+      started_at: item.started_at,
+    }
+  }
+
+  it('polls the lightweight status endpoint while a task is active, without a full refetch', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const item = makeItem({ id: 'item-1', status: 'transcribing', progress: 0.1 })
+      const project = makeProject({ id: 'proj-1', items: [item] })
+      getProject.mockResolvedValue(project)
+      listProjects.mockResolvedValue([project])
+      getProjectStatus.mockResolvedValue({
+        id: 'proj-1',
+        items: [{ ...statusOf(item), progress: 0.5 }],
+      } satisfies ProjectStatusSummary)
+
+      const { result } = renderHook(() => useProjectWorkspace(vi.fn()))
+      await waitFor(() => expect(result.current.projects).toHaveLength(1))
+      act(() => {
+        result.current.setSelectedProjectId('proj-1')
+      })
+      await waitFor(() => expect(result.current.project?.id).toBe('proj-1'))
+      getProject.mockClear()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500)
+      })
+
+      expect(getProjectStatus).toHaveBeenCalledWith('proj-1')
+      expect(result.current.project?.items[0].progress).toBe(0.5)
+      // still "transcribing" - no need to re-fetch the full project/segments
+      expect(getProject).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does one full refetch once an active item leaves an active status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const item = makeItem({ id: 'item-1', status: 'transcribing', progress: 0.9 })
+      const project = makeProject({ id: 'proj-1', items: [item] })
+      const finished = makeProject({
+        id: 'proj-1',
+        items: [{ ...item, status: 'transcribed', progress: 1.0, segments: [] }],
+      })
+      getProject.mockResolvedValue(project)
+      listProjects.mockResolvedValue([project])
+      getProjectStatus.mockResolvedValue({
+        id: 'proj-1',
+        items: [{ ...statusOf(item), status: 'transcribed', progress: 1.0 }],
+      } satisfies ProjectStatusSummary)
+
+      const { result } = renderHook(() => useProjectWorkspace(vi.fn()))
+      await waitFor(() => expect(result.current.projects).toHaveLength(1))
+      act(() => {
+        result.current.setSelectedProjectId('proj-1')
+      })
+      await waitFor(() => expect(result.current.project?.id).toBe('proj-1'))
+      getProject.mockClear()
+      getProject.mockResolvedValue(finished)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500)
+      })
+
+      expect(getProject).toHaveBeenCalledWith('proj-1')
+      await waitFor(() => expect(result.current.project?.items[0].status).toBe('transcribed'))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

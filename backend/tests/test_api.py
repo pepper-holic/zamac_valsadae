@@ -94,6 +94,55 @@ def test_add_multiple_items_are_managed_separately(client):
     assert first["id"] != second["id"]
 
 
+def test_get_project_status_returns_lightweight_item_state(client):
+    project = _create_project(client)
+    item = _add_item(client, project["id"], filename="sample.wav")
+
+    response = client.get(f"/projects/{project['id']}/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == project["id"]
+    assert body["items"] == [
+        {
+            "id": item["id"],
+            "status": "uploaded",
+            "error": None,
+            "progress": None,
+            "stage": None,
+            "started_at": None,
+        }
+    ]
+    # the whole point is not shipping segments/words on every poll
+    assert "segments" not in body["items"][0]
+
+
+def test_get_project_status_for_missing_project_returns_404(client):
+    response = client.get("/projects/does-not-exist/status")
+
+    assert response.status_code == 404
+
+
+def test_get_project_status_reflects_transcribed_item(client, monkeypatch):
+    ctx = _create_project_with_item(client)
+
+    fake_segments = [Segment(id="s1", start=0.0, end=1.0, text="hello")]
+    monkeypatch.setattr(
+        "app.services.transcription_queue.whisper_service.transcribe", lambda *a, **k: fake_segments
+    )
+
+    response = client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+    assert response.status_code == 200
+
+    status = client.get(f"/projects/{ctx['project_id']}/status").json()
+
+    assert status["items"][0]["status"] == "transcribed"
+    assert status["items"][0]["progress"] == 1.0
+
+
 def test_add_item_to_missing_project_returns_404(client):
     response = client.post(
         "/projects/does-not-exist/items",
