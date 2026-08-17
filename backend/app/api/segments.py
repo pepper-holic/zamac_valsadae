@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.api.deps import get_store
@@ -20,15 +22,42 @@ from app.services.project_store import ProjectNotFoundError, ProjectStore
 router = APIRouter(prefix="/projects", tags=["segments"])
 
 
+def _find_item(project: Project, item_id: str) -> MediaItem:
+    item = next((i for i in project.items if i.id == item_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    return item
+
+
 def _get_project_and_item(project_id: str, item_id: str, store: ProjectStore) -> tuple[Project, MediaItem]:
     try:
         project = store.get(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
-    item = next((i for i in project.items if i.id == item_id), None)
-    if item is None:
-        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
-    return project, item
+    return project, _find_item(project, item_id)
+
+
+def _mutate_item(
+    store: ProjectStore, project_id: str, item_id: str, apply: Callable[[MediaItem], object]
+) -> object:
+    """Routes a segment mutation through store.update() so a segment edit
+    can't race the transcription queue worker (or another edit) saving the
+    same project.json concurrently and silently dropping one side's change -
+    store.save() called directly, outside store.update()'s per-project
+    lock, doesn't have that protection. `apply` mutates the found MediaItem
+    in place and returns whatever the route should respond with.
+    """
+    result: list[object] = []
+
+    def mutate(project: Project) -> None:
+        item = _find_item(project, item_id)
+        result.append(apply(item))
+
+    try:
+        store.update(project_id, mutate)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    return result[0]
 
 
 def _apply_segment_update(segment: Segment, update: SegmentUpdate) -> Segment:
@@ -51,17 +80,16 @@ async def update_segment(
     update: SegmentUpdate,
     store: ProjectStore = Depends(get_store),
 ) -> Segment:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> Segment:
+        for index, segment in enumerate(item.segments):
+            if segment.id == segment_id:
+                updated = _apply_segment_update(segment, update)
+                store.push_history(item_id, item.segments)
+                item.segments[index] = updated
+                return updated
+        raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
 
-    for index, segment in enumerate(item.segments):
-        if segment.id == segment_id:
-            updated = _apply_segment_update(segment, update)
-            store.push_history(item_id, item.segments)
-            item.segments[index] = updated
-            store.save(project)
-            return updated
-
-    raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/segments/bulk-update", response_model=list[Segment])
@@ -71,25 +99,25 @@ async def bulk_update_segments(
     request: SegmentBulkUpdateRequest,
     store: ProjectStore = Depends(get_store),
 ) -> list[Segment]:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> list[Segment]:
+        updates_by_id = {entry.id: entry.update for entry in request.updates}
+        missing = updates_by_id.keys() - {segment.id for segment in item.segments}
+        if missing:
+            raise HTTPException(status_code=404, detail=f"세그먼트를 찾을 수 없습니다: {', '.join(missing)}")
 
-    updates_by_id = {entry.id: entry.update for entry in request.updates}
-    missing = updates_by_id.keys() - {segment.id for segment in item.segments}
-    if missing:
-        raise HTTPException(status_code=404, detail=f"세그먼트를 찾을 수 없습니다: {', '.join(missing)}")
+        # Compute every new segment before mutating anything, so a validation
+        # failure partway through (e.g. bad start/end) leaves item.segments and
+        # the undo history untouched instead of applying half the batch.
+        new_segments = [
+            _apply_segment_update(segment, updates_by_id[segment.id]) if segment.id in updates_by_id else segment
+            for segment in item.segments
+        ]
 
-    # Compute every new segment before mutating anything, so a validation
-    # failure partway through (e.g. bad start/end) leaves item.segments and
-    # the undo history untouched instead of applying half the batch.
-    new_segments = [
-        _apply_segment_update(segment, updates_by_id[segment.id]) if segment.id in updates_by_id else segment
-        for segment in item.segments
-    ]
+        store.push_history(item_id, item.segments)
+        item.segments = new_segments
+        return [segment for segment in new_segments if segment.id in updates_by_id]
 
-    store.push_history(item_id, item.segments)
-    item.segments = new_segments
-    store.save(project)
-    return [segment for segment in new_segments if segment.id in updates_by_id]
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/segments/bulk-delete", response_model=list[Segment])
@@ -99,17 +127,17 @@ async def bulk_delete_segments(
     request: SegmentBulkDeleteRequest,
     store: ProjectStore = Depends(get_store),
 ) -> list[Segment]:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> list[Segment]:
+        ids_to_delete = set(request.segment_ids)
+        remaining = [segment for segment in item.segments if segment.id not in ids_to_delete]
+        if len(remaining) == len(item.segments):
+            raise HTTPException(status_code=404, detail="삭제할 세그먼트를 찾을 수 없습니다.")
 
-    ids_to_delete = set(request.segment_ids)
-    remaining = [segment for segment in item.segments if segment.id not in ids_to_delete]
-    if len(remaining) == len(item.segments):
-        raise HTTPException(status_code=404, detail="삭제할 세그먼트를 찾을 수 없습니다.")
+        store.push_history(item_id, item.segments)
+        item.segments = remaining
+        return remaining
 
-    store.push_history(item_id, item.segments)
-    item.segments = remaining
-    store.save(project)
-    return remaining
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post(
@@ -122,20 +150,19 @@ async def split_segment(
     request: SegmentSplitRequest,
     store: ProjectStore = Depends(get_store),
 ) -> list[Segment]:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> list[Segment]:
+        for index, segment in enumerate(item.segments):
+            if segment.id == segment_id:
+                try:
+                    first, second = segment_edit_service.split_segment(segment, request.split_at)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                store.push_history(item_id, item.segments)
+                item.segments[index : index + 1] = [first, second]
+                return [first, second]
+        raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
 
-    for index, segment in enumerate(item.segments):
-        if segment.id == segment_id:
-            try:
-                first, second = segment_edit_service.split_segment(segment, request.split_at)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
-            store.push_history(item_id, item.segments)
-            item.segments[index : index + 1] = [first, second]
-            store.save(project)
-            return [first, second]
-
-    raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/segments/merge", response_model=Segment)
@@ -145,27 +172,27 @@ async def merge_segments(
     request: SegmentMergeRequest,
     store: ProjectStore = Depends(get_store),
 ) -> Segment:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> Segment:
+        to_merge = [segment for segment in item.segments if segment.id in request.segment_ids]
+        if len(to_merge) != len(request.segment_ids):
+            raise HTTPException(status_code=404, detail="일부 세그먼트를 찾을 수 없습니다.")
 
-    to_merge = [segment for segment in item.segments if segment.id in request.segment_ids]
-    if len(to_merge) != len(request.segment_ids):
-        raise HTTPException(status_code=404, detail="일부 세그먼트를 찾을 수 없습니다.")
+        try:
+            merged = segment_edit_service.merge_segments(to_merge)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    try:
-        merged = segment_edit_service.merge_segments(to_merge)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        insert_at = min(
+            index for index, segment in enumerate(item.segments) if segment.id in request.segment_ids
+        )
+        store.push_history(item_id, item.segments)
+        item.segments = [
+            segment for segment in item.segments if segment.id not in request.segment_ids
+        ]
+        item.segments.insert(insert_at, merged)
+        return merged
 
-    insert_at = min(
-        index for index, segment in enumerate(item.segments) if segment.id in request.segment_ids
-    )
-    store.push_history(item_id, item.segments)
-    item.segments = [
-        segment for segment in item.segments if segment.id not in request.segment_ids
-    ]
-    item.segments.insert(insert_at, merged)
-    store.save(project)
-    return merged
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/segments/find-replace", response_model=list[Segment])
@@ -175,14 +202,14 @@ async def find_replace_segments(
     request: SegmentFindReplaceRequest,
     store: ProjectStore = Depends(get_store),
 ) -> list[Segment]:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> list[Segment]:
+        store.push_history(item_id, item.segments)
+        item.segments = segment_edit_service.find_replace(
+            item.segments, field=request.field, find=request.find, replace=request.replace
+        )
+        return item.segments
 
-    store.push_history(item_id, item.segments)
-    item.segments = segment_edit_service.find_replace(
-        item.segments, field=request.field, find=request.find, replace=request.replace
-    )
-    store.save(project)
-    return item.segments
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/segments/detect-fillers", response_model=list[str])
@@ -204,15 +231,15 @@ async def delete_segment(
     segment_id: str,
     store: ProjectStore = Depends(get_store),
 ) -> Response:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> None:
+        remaining = [segment for segment in item.segments if segment.id != segment_id]
+        if len(remaining) == len(item.segments):
+            raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
 
-    remaining = [segment for segment in item.segments if segment.id != segment_id]
-    if len(remaining) == len(item.segments):
-        raise HTTPException(status_code=404, detail="세그먼트를 찾을 수 없습니다.")
+        store.push_history(item_id, item.segments)
+        item.segments = remaining
 
-    store.push_history(item_id, item.segments)
-    item.segments = remaining
-    store.save(project)
+    _mutate_item(store, project_id, item_id, apply)
     return Response(status_code=204)
 
 
@@ -222,17 +249,16 @@ async def undo_segments(
     item_id: str,
     store: ProjectStore = Depends(get_store),
 ) -> UndoRedoResult:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> UndoRedoResult:
+        previous = store.undo(item_id, item.segments)
+        if previous is None:
+            raise HTTPException(status_code=400, detail="되돌릴 변경사항이 없습니다.")
+        item.segments = previous
+        return UndoRedoResult(
+            segments=previous, can_undo=store.can_undo(item_id), can_redo=store.can_redo(item_id)
+        )
 
-    previous = store.undo(item_id, item.segments)
-    if previous is None:
-        raise HTTPException(status_code=400, detail="되돌릴 변경사항이 없습니다.")
-
-    item.segments = previous
-    store.save(project)
-    return UndoRedoResult(
-        segments=previous, can_undo=store.can_undo(item_id), can_redo=store.can_redo(item_id)
-    )
+    return _mutate_item(store, project_id, item_id, apply)
 
 
 @router.post("/{project_id}/items/{item_id}/redo", response_model=UndoRedoResult)
@@ -241,14 +267,13 @@ async def redo_segments(
     item_id: str,
     store: ProjectStore = Depends(get_store),
 ) -> UndoRedoResult:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    def apply(item: MediaItem) -> UndoRedoResult:
+        next_state = store.redo(item_id, item.segments)
+        if next_state is None:
+            raise HTTPException(status_code=400, detail="다시 실행할 변경사항이 없습니다.")
+        item.segments = next_state
+        return UndoRedoResult(
+            segments=next_state, can_undo=store.can_undo(item_id), can_redo=store.can_redo(item_id)
+        )
 
-    next_state = store.redo(item_id, item.segments)
-    if next_state is None:
-        raise HTTPException(status_code=400, detail="다시 실행할 변경사항이 없습니다.")
-
-    item.segments = next_state
-    store.save(project)
-    return UndoRedoResult(
-        segments=next_state, can_undo=store.can_undo(item_id), can_redo=store.can_redo(item_id)
-    )
+    return _mutate_item(store, project_id, item_id, apply)
