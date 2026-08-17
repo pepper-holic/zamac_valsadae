@@ -84,6 +84,12 @@ def test_translate_segments_sends_symbol_only_text_to_translator_too():
 
 
 def test_translate_segments_processes_in_batches_and_reports_progress():
+    # A handful of batches run concurrently within a wave (see
+    # _MAX_CONCURRENT_BATCHES), so which one finishes first - and therefore
+    # the exact intermediate progress values and translator.batches order -
+    # isn't deterministic. What must hold regardless of completion order:
+    # every batch ran exactly once, the final result is correct, and
+    # progress reached 1.0 after as many calls as there were batches.
     segments = [
         Segment(id=str(i), start=float(i), end=float(i + 1), text=f"문장{i}") for i in range(5)
     ]
@@ -98,8 +104,9 @@ def test_translate_segments_processes_in_batches_and_reports_progress():
     )
 
     assert [s.translation for s in result] == ["trans0", "trans1", "trans2", "trans3", "trans4"]
-    assert translator.batches == [["문장0", "문장1"], ["문장2", "문장3"], ["문장4"]]
-    assert progress_calls == [pytest.approx(0.4), pytest.approx(0.8), pytest.approx(1.0)]
+    assert sorted(translator.batches) == [["문장0", "문장1"], ["문장2", "문장3"], ["문장4"]]
+    assert len(progress_calls) == 3
+    assert progress_calls[-1] == pytest.approx(1.0)
 
 
 class SplittingRetryTranslator:
@@ -155,15 +162,20 @@ def test_translate_segments_raises_when_cancelled_before_first_batch():
 
 
 def test_translate_segments_stops_between_batches_when_cancelled():
+    # should_cancel is checked once per *wave* of concurrent batches, not
+    # per individual batch - 8 segments at batch_size=2 makes 4 batches,
+    # which is one wave of 3 (_MAX_CONCURRENT_BATCHES) plus a second wave
+    # of 1. Cancelling before the second wave means the first wave's three
+    # batches still ran (in whatever order they completed).
     segments = [
-        Segment(id=str(i), start=float(i), end=float(i + 1), text=f"문장{i}") for i in range(5)
+        Segment(id=str(i), start=float(i), end=float(i + 1), text=f"문장{i}") for i in range(8)
     ]
-    translator = FakeTranslator({f"문장{i}": f"trans{i}" for i in range(5)})
+    translator = FakeTranslator({f"문장{i}": f"trans{i}" for i in range(8)})
     calls = {"n": 0}
 
     def should_cancel() -> bool:
         calls["n"] += 1
-        return calls["n"] > 1  # let the first batch through, cancel before the second
+        return calls["n"] > 1  # let the first wave through, cancel before the second
 
     with pytest.raises(TranslationCancelled):
         translate_segments(
@@ -173,7 +185,11 @@ def test_translate_segments_stops_between_batches_when_cancelled():
             should_cancel=should_cancel,
         )
 
-    assert translator.batches == [["문장0", "문장1"]]
+    assert sorted(translator.batches) == [
+        ["문장0", "문장1"],
+        ["문장2", "문장3"],
+        ["문장4", "문장5"],
+    ]
 
 
 def test_translate_segments_applies_stt_correction_to_text_field():

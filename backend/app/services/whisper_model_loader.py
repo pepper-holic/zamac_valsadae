@@ -210,6 +210,15 @@ def _load_model(model_dir: Path, device: str) -> WhisperModel:
     )
 
 
+# Which model_size is currently cached for a given device - lets
+# _get_model_on_device evict a stale size for that device instead of
+# accumulating every model size a user has ever picked in memory (each
+# checkpoint is hundreds of MB to a few GB, and GPU memory in particular is
+# scarce). Keyed separately from _MODEL_CACHE since the cache itself is
+# keyed by "size:device", not by device alone.
+_CACHED_MODEL_SIZE_BY_DEVICE: dict[str, str] = {}
+
+
 def _get_model_on_device(
     model_size: str,
     device: str,
@@ -223,6 +232,14 @@ def _get_model_on_device(
     # versa.
     cache_key = f"{model_size}:{device}"
     if cache_key not in _MODEL_CACHE:
+        # Only one model_size is ever actually in use per device at a time
+        # in practice - evict whatever was loaded before so switching
+        # sizes (e.g. "small" -> "large-v3") doesn't leave the old
+        # multi-hundred-MB/GB checkpoint sitting in memory unused.
+        stale_size = _CACHED_MODEL_SIZE_BY_DEVICE.get(device)
+        if stale_size is not None and stale_size != model_size:
+            _MODEL_CACHE.pop(f"{stale_size}:{device}", None)
+
         root = download_root if download_root is not None else _default_download_root()
         model_dir = _model_dir(model_size, root)
         if not is_model_cached(model_size, download_root=root):
@@ -231,6 +248,7 @@ def _get_model_on_device(
             model_dir.mkdir(parents=True, exist_ok=True)
             _download_model_with_progress(model_size, str(model_dir), on_progress)
         _MODEL_CACHE[cache_key] = _load_model(model_dir, device)
+        _CACHED_MODEL_SIZE_BY_DEVICE[device] = model_size
         if on_stage is not None:
             on_stage("processing")
     return _MODEL_CACHE[cache_key]

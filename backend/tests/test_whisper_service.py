@@ -28,12 +28,16 @@ def _clear_model_cache():
     """`_MODEL_CACHE` is module-level global state keyed by "model_size:device"
     - without resetting it, a fake model cached under model_size="small" by
     one test would leak into and break every later test using that same
-    size."""
-    from app.services import whisper_service
+    size. `_CACHED_MODEL_SIZE_BY_DEVICE` (which drives cache eviction) is
+    separate module state in whisper_model_loader.py and needs the same
+    reset."""
+    from app.services import whisper_model_loader, whisper_service
 
     whisper_service._MODEL_CACHE.clear()
+    whisper_model_loader._CACHED_MODEL_SIZE_BY_DEVICE.clear()
     yield
     whisper_service._MODEL_CACHE.clear()
+    whisper_model_loader._CACHED_MODEL_SIZE_BY_DEVICE.clear()
 
 
 @dataclass
@@ -593,6 +597,48 @@ def test_get_model_on_device_caches_separately_per_device(monkeypatch, tmp_path)
     assert gpu_model_again == "model-on-cuda"
     # the second "cuda" request was served from cache, not reloaded
     assert calls == ["cuda", "cpu"]
+
+
+def test_get_model_on_device_evicts_the_previous_size_for_that_device(monkeypatch, tmp_path):
+    """Switching model_size on the same device (e.g. "small" -> "large-v3")
+    must drop the old checkpoint from the cache instead of accumulating
+    every size a user has ever picked in memory."""
+    from app.services import whisper_model_loader
+
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
+    monkeypatch.setattr(
+        whisper_model_loader, "_load_model", lambda model_dir, device: f"model-{model_dir.name}-{device}"
+    )
+
+    _get_model_on_device("small", "cpu", download_root=tmp_path)
+    assert "small:cpu" in whisper_model_loader._MODEL_CACHE
+
+    _get_model_on_device("large-v3", "cpu", download_root=tmp_path)
+
+    assert "small:cpu" not in whisper_model_loader._MODEL_CACHE
+    assert "large-v3:cpu" in whisper_model_loader._MODEL_CACHE
+
+
+def test_get_model_on_device_does_not_evict_across_different_devices(monkeypatch, tmp_path):
+    """Eviction is per-device - a cuda load must not evict an unrelated cpu
+    model for a different size (the GPU-fails-at-runtime fallback path
+    depends on the cpu instance surviving independently)."""
+    from app.services import whisper_model_loader
+
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
+    monkeypatch.setattr(
+        whisper_model_loader, "_load_model", lambda model_dir, device: f"model-{model_dir.name}-{device}"
+    )
+
+    _get_model_on_device("small", "cpu", download_root=tmp_path)
+    _get_model_on_device("large-v3", "cuda", download_root=tmp_path)
+
+    assert "small:cpu" in whisper_model_loader._MODEL_CACHE
+    assert "large-v3:cuda" in whisper_model_loader._MODEL_CACHE
 
 
 def test_transcribe_retries_on_cpu_when_gpu_fails_at_runtime(monkeypatch, tmp_path):

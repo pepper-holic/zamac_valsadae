@@ -2,6 +2,7 @@ import json
 import random
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 
@@ -20,6 +21,15 @@ _MAX_DELAY_SEC = 30.0
 # around a batch, so nuance decisions aren't blind to what's just outside
 # the batch's own boundaries.
 _WINDOW_SIZE = 6
+
+# Batches are independent API calls (each already carries its own local
+# context window, not a running conversation), so a handful can be in
+# flight at once to overlap their network wait time instead of paying for
+# it serially - same requests and responses either way, just concurrent.
+# Kept modest so a large job doesn't slam a rate-limited relay with a burst
+# of simultaneous requests (the existing per-call retry/backoff handles the
+# residual 429s, but preventing them in the first place is cheaper).
+_MAX_CONCURRENT_BATCHES = 3
 
 
 def _retry_delay_seconds(attempt: int, retry_after_header: str | None) -> float:
@@ -277,9 +287,12 @@ def translate_segments(
     # (2) 배치 앞뒤 몇 문장씩의 슬라이딩 윈도우로 그 손실을 보완한다.
     context = translator.extract_context([segment.text for segment in segments]) if pending_segments else ""
 
+    # STT 오탈자 교정 + 번역을 한 번의 호출로 함께 받는다 (수동 AI 검수 패키지
+    # 왕복을 없애기 위함) - review_service.py의 검수 프롬프트와 같은 의도를
+    # 번역 API 요청에 합쳐 넣은 것. 용어집 강제 치환도 로컬 후처리가 아니라
+    # 프롬프트에 지시사항으로 실어서 LLM이 반영하게 한다.
+    batch_specs: list[tuple[list[int], list[str], list[str], list[str]]] = []
     for start in range(0, len(pending_segments), batch_size):
-        if should_cancel is not None and should_cancel():
-            raise TranslationCancelled("번역이 취소되었습니다.")
         batch = pending_segments[start : start + batch_size]
         batch_indices = pending_indices[start : start + batch_size]
         batch_texts = [segment.text for segment in batch]
@@ -287,19 +300,32 @@ def translate_segments(
         window_after = [
             s.text for s in pending_segments[start + batch_size : start + batch_size + _WINDOW_SIZE]
         ]
-        # STT 오탈자 교정 + 번역을 한 번의 호출로 함께 받는다 (수동 AI 검수
-        # 패키지 왕복을 없애기 위함) - review_service.py의 검수 프롬프트와
-        # 같은 의도를 번역 API 요청에 합쳐 넣은 것. 용어집 강제 치환도 로컬
-        # 후처리가 아니라 프롬프트에 지시사항으로 실어서 LLM이 반영하게 한다.
-        corrected_texts, translations = _translate_batch_with_retry(
-            translator, batch_texts, glossary, context, window_before, window_after
-        )
-        for index, corrected_text, translation in zip(batch_indices, corrected_texts, translations):
-            corrected_text_by_index[index] = corrected_text
-            translations_by_index[index] = translation
-        done_count += len(batch)
-        if on_progress:
-            on_progress(min(done_count / total, 1.0))
+        batch_specs.append((batch_indices, batch_texts, window_before, window_after))
+
+    # A handful of batches run concurrently per wave; should_cancel is
+    # checked between waves rather than per-batch, so a cancel lands within
+    # one wave's worth of in-flight requests instead of not being
+    # observable at all once several batches are already in flight.
+    for wave_start in range(0, len(batch_specs), _MAX_CONCURRENT_BATCHES):
+        if should_cancel is not None and should_cancel():
+            raise TranslationCancelled("번역이 취소되었습니다.")
+        wave = batch_specs[wave_start : wave_start + _MAX_CONCURRENT_BATCHES]
+        with ThreadPoolExecutor(max_workers=len(wave)) as executor:
+            futures = {
+                executor.submit(
+                    _translate_batch_with_retry, translator, texts, glossary, context, before, after
+                ): (indices, len(texts))
+                for indices, texts, before, after in wave
+            }
+            for future in as_completed(futures):
+                indices, batch_len = futures[future]
+                corrected_texts, translations = future.result()
+                for index, corrected_text, translation in zip(indices, corrected_texts, translations):
+                    corrected_text_by_index[index] = corrected_text
+                    translations_by_index[index] = translation
+                done_count += batch_len
+                if on_progress:
+                    on_progress(min(done_count / total, 1.0))
 
     for index in pending_indices:
         segment = segments[index]
