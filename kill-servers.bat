@@ -9,7 +9,7 @@ echo 이 스크립트는 로컬에서 자주 사용하는 서버 포트에 바�
 echo 필요하면 관리자 권한으로 실행하세요.
 echo.
 
-set PORTS=8000 5173 3000 3001
+set PORTS=8000 5173
 
 echo Target ports: %PORTS%
 for %%P in (%PORTS%) do (

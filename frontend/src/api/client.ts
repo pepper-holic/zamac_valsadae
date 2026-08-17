@@ -345,11 +345,6 @@ export async function importReviewPackage(
   return parseOrThrow<ReviewImportResult>(response)
 }
 
-export async function getAuthStatus(): Promise<AuthStatus> {
-  const response = await fetch(`${API_BASE}/auth/session`)
-  return parseOrThrow<AuthStatus>(response)
-}
-
 export async function postAuthSession(accessToken: string, email: string): Promise<AuthStatus> {
   const response = await fetch(`${API_BASE}/auth/session`, {
     method: 'POST',
