@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { Segment } from '../api/types'
 import { formatClock } from '../utils/time'
 
@@ -41,6 +41,57 @@ function getDetailWindow(segment: Segment, duration: number): { windowStart: num
     windowEnd: Math.min(duration, segment.end + padding),
   }
 }
+
+type MarkersProps = {
+  segments: Segment[]
+  duration: number
+  selectedSegmentId: string | null
+  onSelectSegment: (segmentId: string) => void
+  onSeek: (time: number) => void
+}
+
+// currentTime (which changes many times a second during playback) never
+// affects a marker's own position/label - only the separate playhead div
+// does. Without this memo boundary, every timeupdate re-renders one
+// element per segment regardless, which is the whole file's transcript on
+// a long recording.
+const TimelineMarkers = memo(function TimelineMarkers({
+  segments,
+  duration,
+  selectedSegmentId,
+  onSelectSegment,
+  onSeek,
+}: MarkersProps) {
+  return (
+    <>
+      {segments.map((segment) => (
+        <div
+          key={segment.id}
+          role="button"
+          tabIndex={0}
+          className={segment.id === selectedSegmentId ? 'timeline-marker active' : 'timeline-marker'}
+          style={{
+            left: duration > 0 ? `${(segment.start / duration) * 100}%` : '0%',
+            width: duration > 0 ? `${Math.max(((segment.end - segment.start) / duration) * 100, 0.3)}%` : '0%',
+          }}
+          title={segment.text}
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelectSegment(segment.id)
+            onSeek(segment.start)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onSelectSegment(segment.id)
+              onSeek(segment.start)
+            }
+          }}
+        />
+      ))}
+    </>
+  )
+})
 
 export function Timeline({
   duration,
@@ -146,32 +197,13 @@ export function Timeline({
           style={{ width: `${zoom * 100}%` }}
           data-tip="클릭한 지점으로 이동합니다. 색칠된 구간은 인식된 문장이며, 클릭하면 선택됩니다."
         >
-          {segments.map((segment) => (
-            <div
-              key={segment.id}
-              role="button"
-              tabIndex={0}
-              className={segment.id === selectedSegmentId ? 'timeline-marker active' : 'timeline-marker'}
-              style={{
-                left: duration > 0 ? `${(segment.start / duration) * 100}%` : '0%',
-                width:
-                  duration > 0 ? `${Math.max(((segment.end - segment.start) / duration) * 100, 0.3)}%` : '0%',
-              }}
-              title={segment.text}
-              onClick={(event) => {
-                event.stopPropagation()
-                onSelectSegment(segment.id)
-                onSeek(segment.start)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelectSegment(segment.id)
-                  onSeek(segment.start)
-                }
-              }}
-            />
-          ))}
+          <TimelineMarkers
+            segments={segments}
+            duration={duration}
+            selectedSegmentId={selectedSegmentId}
+            onSelectSegment={onSelectSegment}
+            onSeek={onSeek}
+          />
           <div className="timeline-playhead" style={{ left: `${progressPercent}%` }} />
         </div>
         {ticks.length > 0 && (

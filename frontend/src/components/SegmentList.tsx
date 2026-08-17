@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReviewDiffEntry, Segment } from '../api/types'
 import { detectFillerSegments, updateSegment } from '../api/client'
 import { PanelHint } from './PanelHint'
@@ -154,18 +154,27 @@ export function SegmentList({
     }
   }
 
-  const unreviewedCount = segments.filter(isUnreviewed).length
-  const needsCheckCount = segments.filter(needsCheck).length
-  const okCount = segments.filter(isOk).length
-  const reviewedCount = segments.filter((s) => s.reviewed).length
+  // segments only gets a new array reference when it actually changes
+  // (edits, or a poll picking up fresh results) - memoizing these means a
+  // re-render triggered by unrelated state (e.g. playback currentTime
+  // ticking in a sibling component) doesn't re-scan the whole segment list
+  // five times over.
+  const unreviewedCount = useMemo(() => segments.filter(isUnreviewed).length, [segments])
+  const needsCheckCount = useMemo(() => segments.filter(needsCheck).length, [segments])
+  const okCount = useMemo(() => segments.filter(isOk).length, [segments])
+  const reviewedCount = useMemo(() => segments.filter((s) => s.reviewed).length, [segments])
 
-  const filteredSegments = segments.filter((segment) => {
-    if (filter === 'needsCheck') return needsCheck(segment)
-    if (filter === 'reviewed') return segment.reviewed
-    if (filter === 'unreviewed') return isUnreviewed(segment)
-    if (filter === 'ok') return isOk(segment)
-    return true
-  })
+  const filteredSegments = useMemo(
+    () =>
+      segments.filter((segment) => {
+        if (filter === 'needsCheck') return needsCheck(segment)
+        if (filter === 'reviewed') return segment.reviewed
+        if (filter === 'unreviewed') return isUnreviewed(segment)
+        if (filter === 'ok') return isOk(segment)
+        return true
+      }),
+    [segments, filter],
+  )
 
   const totalPages = Math.max(1, Math.ceil(filteredSegments.length / PAGE_SIZE))
 
