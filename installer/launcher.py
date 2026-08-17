@@ -62,7 +62,7 @@ _STEP_LABELS_KO = {
 
 
 def _show_error(message: str) -> None:
-    ctypes.windll.user32.MessageBoxW(None, message, "Zamak_Valsadae", 0x10)
+    ctypes.windll.user32.MessageBoxW(None, message, "자막발사대", 0x10)
 
 
 def _log(message: str) -> None:
@@ -193,10 +193,12 @@ def _wait_until_backend_ready(splash: Splash) -> bool:
 def main() -> int:
     root_dir = Path(sys.executable).resolve().parent
     icon_path = root_dir / "icon.ico"
+    logo_path = root_dir / "icon.png"
 
     splash = Splash(
-        "Zamak_Valsadae (자막발사대)",
+        "자막발사대",
         icon_path=str(icon_path) if icon_path.exists() else None,
+        logo_path=str(logo_path) if logo_path.exists() else None,
     )
 
     done = threading.Event()

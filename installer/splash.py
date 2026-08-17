@@ -56,7 +56,7 @@ def _rounded_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float,
 
 
 class Splash:
-    def __init__(self, app_name: str, icon_path: str | None = None) -> None:
+    def __init__(self, app_name: str, icon_path: str | None = None, logo_path: str | None = None) -> None:
         self.root = tk.Tk()
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
@@ -79,12 +79,27 @@ class Splash:
             fill=_SURFACE, outline=_BORDER, width=1,
         )
 
-        # Small accent mark standing in for a logo, paired with the app name.
-        mark_cx, mark_cy, mark_r = 46, 58, 7
-        self._canvas.create_oval(
-            mark_cx - mark_r, mark_cy - mark_r, mark_cx + mark_r, mark_cy + mark_r,
-            fill=_ACCENT, outline="",
-        )
+        # App logo next to the name - falls back to a plain accent dot if the
+        # PNG is missing or Tk's PhotoImage can't load it (no Pillow in this
+        # PyInstaller build, so only GIF/PNG/PPM are supported).
+        mark_cx, mark_cy, mark_r = 46, 58, 14
+        self._logo_image = None
+        if logo_path:
+            try:
+                image = tk.PhotoImage(file=logo_path)
+                # PhotoImage.subsample only takes integer factors - the source
+                # glyph is 256x256, so /8 lands close to the 2*mark_r target.
+                factor = max(1, image.width() // (mark_r * 2))
+                self._logo_image = image.subsample(factor, factor)
+            except tk.TclError:
+                self._logo_image = None
+        if self._logo_image is not None:
+            self._canvas.create_image(mark_cx, mark_cy, image=self._logo_image)
+        else:
+            self._canvas.create_oval(
+                mark_cx - mark_r, mark_cy - mark_r, mark_cx + mark_r, mark_cy + mark_r,
+                fill=_ACCENT, outline="",
+            )
         self._canvas.create_text(
             mark_cx + mark_r + 12, mark_cy,
             text=app_name, anchor="w",

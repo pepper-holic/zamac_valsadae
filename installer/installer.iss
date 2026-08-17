@@ -70,6 +70,7 @@ Source: "..\env.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\kill-servers.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "icon.png"; DestDir: "{app}"; Flags: ignoreversion
 Source: "launcher_dist\ZamakValsadae.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -78,4 +79,4 @@ Name: "{group}\제거"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\Zamak_Valsadae"; Filename: "{app}\ZamakValsadae.exe"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\ZamakValsadae.exe"; Description: "설치 마치고 바로 실행 (최초 실행 시 런타임 다운로드로 인터넷 필요, 수 분~수십 분 소요)"; Flags: postinstall skipifsilent nowait
+Filename: "{app}\ZamakValsadae.exe"; Description: "설치 마치고 바로 실행"; Flags: postinstall skipifsilent nowait
