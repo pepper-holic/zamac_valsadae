@@ -146,7 +146,7 @@ export const DOWNLOAD_PAGE: LegalPageDef = {
         <li>또는 <code>install.bat</code> + <code>run.bat</code>으로 포터블 방식 실행.</li>
       </ul>
       <div className="legal-card-note">
-        다운로드 링크 (더미): <Dummy>github.com/pepper-holic/zamac_valsadae/releases/latest</Dummy>
+        <a href="/downloads/Zamak_Valsadae_Setup.exe">Zamak_Valsadae_Setup.exe 다운로드</a>
       </div>
 
       <h2 style={{ marginTop: 24 }}>
