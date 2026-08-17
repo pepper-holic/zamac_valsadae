@@ -567,16 +567,22 @@ def test_detect_device_returns_cpu_when_detection_raises(monkeypatch):
 
 
 def test_get_model_on_device_caches_separately_per_device(monkeypatch, tmp_path):
-    from app.services import whisper_service
+    from app.services import whisper_model_loader
 
-    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+    # _get_model_on_device now lives in whisper_model_loader.py, and its
+    # internal calls to is_model_cached/_load_model resolve as bare names in
+    # that module's own namespace - patching the whisper_service re-export
+    # of the same names wouldn't reach them.
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
     calls = []
 
     def fake_load_model(model_dir, device):
         calls.append(device)
         return f"model-on-{device}"
 
-    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+    monkeypatch.setattr(whisper_model_loader, "_load_model", fake_load_model)
 
     gpu_model = _get_model_on_device("small", "cuda", download_root=tmp_path)
     cpu_model = _get_model_on_device("small", "cpu", download_root=tmp_path)
@@ -593,10 +599,12 @@ def test_transcribe_retries_on_cpu_when_gpu_fails_at_runtime(monkeypatch, tmp_pa
     """Covers a missing cuBLAS/cuDNN DLL - faster-whisper's transcribe() call
     can succeed at model *construction* but only fail once a kernel actually
     runs, which happens inside this call, not at _load_model() time."""
-    from app.services import whisper_service
+    from app.services import whisper_model_loader, whisper_service
 
     monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
-    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
 
     class FakeCudaModel:
         def transcribe(self, audio_path, **kwargs):
@@ -607,7 +615,7 @@ def test_transcribe_retries_on_cpu_when_gpu_fails_at_runtime(monkeypatch, tmp_pa
     def fake_load_model(model_dir, device):
         return FakeCudaModel() if device == "cuda" else cpu_model
 
-    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+    monkeypatch.setattr(whisper_model_loader, "_load_model", fake_load_model)
 
     segments = transcribe(Path("video.mp4"), model_size="small", download_root=tmp_path)
 
@@ -616,26 +624,32 @@ def test_transcribe_retries_on_cpu_when_gpu_fails_at_runtime(monkeypatch, tmp_pa
 
 
 def test_transcribe_raises_without_retry_when_cpu_itself_fails(monkeypatch, tmp_path):
-    from app.services import whisper_service
+    from app.services import whisper_model_loader, whisper_service
 
     monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cpu")
-    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
 
     class FakeFailingModel:
         def transcribe(self, audio_path, **kwargs):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(whisper_service, "_load_model", lambda model_dir, device: FakeFailingModel())
+    monkeypatch.setattr(
+        whisper_model_loader, "_load_model", lambda model_dir, device: FakeFailingModel()
+    )
 
     with pytest.raises(RuntimeError, match="boom"):
         transcribe(Path("video.mp4"), model_size="small", download_root=tmp_path)
 
 
 def test_transcribe_does_not_treat_cancellation_as_a_gpu_failure(monkeypatch, tmp_path):
-    from app.services import whisper_service
+    from app.services import whisper_model_loader, whisper_service
 
     monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
-    monkeypatch.setattr(whisper_service, "is_model_cached", lambda model_size, download_root=None: True)
+    monkeypatch.setattr(
+        whisper_model_loader, "is_model_cached", lambda model_size, download_root=None: True
+    )
 
     cpu_load_calls = []
 
@@ -644,7 +658,7 @@ def test_transcribe_does_not_treat_cancellation_as_a_gpu_failure(monkeypatch, tm
             cpu_load_calls.append(1)
         return FakeWhisperModel([FakeRawSegment(start=0.0, end=1.0, text="x")])
 
-    monkeypatch.setattr(whisper_service, "_load_model", fake_load_model)
+    monkeypatch.setattr(whisper_model_loader, "_load_model", fake_load_model)
 
     with pytest.raises(TranscriptionCancelled):
         transcribe(
@@ -658,12 +672,15 @@ def test_transcribe_does_not_treat_cancellation_as_a_gpu_failure(monkeypatch, tm
 
 
 def test_get_transcribe_device_reports_detected_device(monkeypatch):
-    from app.services import whisper_service
+    from app.services import whisper_model_loader
 
-    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cuda")
+    # get_transcribe_device() lives in whisper_model_loader.py and calls
+    # _detect_device() as a bare name resolved in that module's own
+    # namespace - patching the whisper_service re-export wouldn't reach it.
+    monkeypatch.setattr(whisper_model_loader, "_detect_device", lambda: "cuda")
     assert get_transcribe_device() == "cuda"
 
-    monkeypatch.setattr(whisper_service, "_detect_device", lambda: "cpu")
+    monkeypatch.setattr(whisper_model_loader, "_detect_device", lambda: "cpu")
     assert get_transcribe_device() == "cpu"
 
 
@@ -674,9 +691,12 @@ def test_register_gpu_dll_dirs_adds_existing_bin_dirs_to_dll_search_and_path(mon
     import os
     import types
 
-    from app.services import whisper_service
+    from app.services import whisper_model_loader, whisper_service
 
-    monkeypatch.setattr(whisper_service, "_gpu_dll_dirs_registered", False)
+    # _register_gpu_dll_dirs()'s `global _gpu_dll_dirs_registered` binds to
+    # whisper_model_loader.py's own namespace (where it's actually defined),
+    # not the whisper_service re-export.
+    monkeypatch.setattr(whisper_model_loader, "_gpu_dll_dirs_registered", False)
 
     cublas_pkg = tmp_path / "cublas_pkg"
     (cublas_pkg / "bin").mkdir(parents=True)
@@ -1378,9 +1398,9 @@ def test_transcribe_multilingual_fills_gaps_in_the_uncertain_branch_too(monkeypa
 def test_register_gpu_dll_dirs_is_a_no_op_the_second_time(monkeypatch, tmp_path):
     import os
 
-    from app.services import whisper_service
+    from app.services import whisper_model_loader, whisper_service
 
-    monkeypatch.setattr(whisper_service, "_gpu_dll_dirs_registered", True)
+    monkeypatch.setattr(whisper_model_loader, "_gpu_dll_dirs_registered", True)
     calls = []
     monkeypatch.setattr(whisper_service.importlib, "import_module", lambda name: calls.append(name))
 
