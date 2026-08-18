@@ -25,6 +25,18 @@
 
 ## 배포 (오라클 클라우드 VM, 168.110.107.78)
 
+`server/` 코드를 바꾼 뒤에는 저장소 루트의 `deploy\deploy-relay.ps1`로 배포합니다:
+
+```powershell
+.\deploy\deploy-relay.ps1 -KeyPath "C:\path\to\oracle-ssh-key.key"
+```
+
+로컬에서 테스트를 먼저 돌려 실패하면 배포하지 않고, 배포 후 `/healthz`가 200이 아니면
+자동으로 이전 버전으로 롤백합니다. `.env`(API 키, Supabase 시크릿)는 건드리지 않고
+`app/` 코드만 교체합니다.
+
+배포 구조(스크립트가 하는 일의 배경):
+
 ```
 /opt/relay/            # 이 디렉터리 배포 위치
 /opt/relay/.venv/       # python -m venv
@@ -49,18 +61,14 @@ nginx: 80(→443 예정) → 127.0.0.1:8000 리버스 프록시
 ## 같은 VM에 호스팅 중인 다른 것: `website/` (로드맵 #42)
 
 `website/`(Vite + React SPA)의 빌드 산출물(`website/dist`)도 이 VM에 정적 파일로 같이 올라가
-있다. 배포 절차(수동, 스크립트화 안 됨):
+있다. `website/` 코드를 바꾼 뒤에는 저장소 루트의 `deploy\deploy-website.ps1`로 배포한다:
 
-```bash
-cd website && npm run build
-tar -czf /tmp/website-dist.tar.gz -C dist .
-scp -i <key> /tmp/website-dist.tar.gz opc@168.110.107.78:/tmp/
-ssh -i <key> opc@168.110.107.78
-  sudo rm -rf /var/www/website/*
-  sudo tar -xzf /tmp/website-dist.tar.gz -C /var/www/website
-  sudo chown -R nginx:nginx /var/www/website
-  sudo restorecon -Rv /var/www/website
+```powershell
+.\deploy\deploy-website.ps1 -KeyPath "C:\path\to\oracle-ssh-key.key"
 ```
+
+(설치 프로그램까지 같이 새로 빌드하려면 `deploy\deploy-release.ps1`을 대신 사용 — 이
+스크립트도 내부적으로 `deploy-website.ps1`을 호출한다.)
 
 nginx 설정은 `deploy/nginx-website.conf`(SPA라 `try_files $uri /index.html` 필요), 접속 주소는
 `https://site.168-110-107-78.nip.io` (certbot으로 별도 인증서 발급, `168-110-107-78.nip.io`와는
