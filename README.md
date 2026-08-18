@@ -4,6 +4,11 @@
 붙이는 로컬 웹 도구입니다. 전사는 완전히 로컬에서 처리되고, 번역은 로그인(서버 제공 API 키) 또는
 `TRANSLATION_API_KEY` 설정을 통해 OpenAI 호환 API로 처리됩니다.
 
+> **처음이라면**: 이 저장소는 로컬 앱(`backend/`+`frontend/`) 외에도 클라우드 릴레이 서버
+> (`server/`)와 별도 마케팅 사이트(`website/`)를 함께 담고 있습니다. 전체 구조·인증 흐름·
+> 배포 방법은 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)에 정리되어 있습니다 — 코드를
+> 고치기 전에 한 번 읽어보시길 권합니다.
+
 ## 개요
 
 - 백엔드: FastAPI + Whisper + CTranslate2
@@ -12,6 +17,9 @@
 - `data/`에 모델 캐시와 프로젝트 데이터를 저장하며, 실행 시 자동으로 Whisper 모델을 다운로드하고 캐시합니다.
 - Whisper 모델은 크기별로 최초 1회만 자동 다운로드되며, 전사 화면에 다운로드 여부와
   진행 상황("모델 다운로드 중" / "처리 중")이 표시됩니다.
+- 로그인(이메일/비밀번호, Supabase Auth)하면 API 키 설정 없이 클라우드 릴레이(`server/`)를
+  통해 번역을 쓸 수 있습니다 — 로그인은 선택 사항이며, 안 해도 로컬 모델/수동 API 키로
+  기존처럼 동작합니다.
 
 ## 빠른 시작 (Windows 사용자를 위한 권장 방법 — 설치형 포터블 패키지)
 
@@ -88,15 +96,25 @@ npm run dev
 
 ## 프로젝트 구조
 
-- `backend/` — FastAPI 앱, 서비스 로직, 모델 스키마, 테스트
-- `frontend/` — React 애플리케이션, 타입 정의, 컴포넌트
-- `data/` — Whisper 모델 캐시(`whisper_models/`), 프로젝트 저장소(`projects/`)
-- `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
-- `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
-- `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
+이 저장소에는 서로 독립적으로 배포되는 여러 구성 요소가 들어있습니다 — 전체 관계와
+데이터 흐름은 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)를 참고하세요.
+
+- `backend/` — FastAPI 앱(로컬 전용, `127.0.0.1:8000`), 서비스 로직, 모델 스키마, 테스트
+- `frontend/` — React 애플리케이션(데스크톱 앱 UI), 타입 정의, 컴포넌트
+- `server/` — 클라우드 릴레이 서버(FastAPI). 로그인한 사용자의 번역 요청을 Supabase JWT로
+  검증한 뒤, 서버가 보관한 OpenAI/Gemini 키로 대리 호출. 오라클 클라우드 VM에 별도 배포.
 - `website/` — 서비스 소개·다운로드·가격 정책·이용약관 등 마케팅/서비스 페이지 전용 독립
   웹사이트(Vite + React Router). 앱(`frontend/`)과 별개로 배포합니다. 여러 페이지에 더미
   (예시) 데이터가 포함되어 있으니 상세는 `website/README.md` 참고.
+- `deploy/` — `server/`·`website/`를 오라클 VM에 배포하는 PowerShell 스크립트
+  (`deploy-website.ps1`, `deploy-relay.ps1`, `deploy-release.ps1`)
+- `installer/` — Windows 설치 프로그램(`.exe`) 빌드 스크립트(Inno Setup + PyInstaller 런처)
+- `docs/` — 아키텍처 가이드, 기능 로드맵/의사결정 히스토리
+- `data/` — Whisper 모델 캐시(`whisper_models/`), 프로젝트 저장소(`projects/`)
+- `runtime/` — `install.bat` 실행 시 내려받는 포터블 Python/Node.js/ffmpeg (Git에 커밋되지 않음)
+- `install.bat`, `install.ps1`, `env.bat`, `run.bat` — Windows 설치/실행 스크립트
+  (`installer/installer.iss`가 이 경로를 고정 참조하므로 옮기지 마세요)
+- `kill-servers.bat` — 로컬 개발용 서버 포트 정리 스크립트
 
 ## 내부 개발 가이드
 
@@ -171,6 +189,10 @@ npm run test
   UI 동작은 `npm run dev`로 직접 확인합니다.
 
 ## 환경변수
+
+자주 건드리는 것만 요약합니다 — `backend/`·`server/`·`frontend/` 전체 환경변수 표는
+[`docs/ARCHITECTURE.md#7-환경변수-서비스별`](docs/ARCHITECTURE.md#7-환경변수-서비스별)에
+있습니다.
 
 | 변수 | 설명 |
 |---|---|
