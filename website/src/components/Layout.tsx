@@ -15,7 +15,7 @@ export function Layout() {
       <header className="site-header">
         <NavLink to="/" className="site-brand">
           <img className="site-brand-mark" src="/app-icon-glyph.png" alt="" aria-hidden="true" />
-          Zamak_Valsadae
+          자막발사대
         </NavLink>
         <nav className="site-nav" aria-label="주요 메뉴">
           {NAV_LINKS.map((link) => (

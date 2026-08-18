@@ -61,3 +61,62 @@ export function Clause({ title, children }: { title: string; children: ReactNode
     </div>
   )
 }
+
+export function OsCard({
+  icon,
+  title,
+  status,
+  children,
+}: {
+  icon: string
+  title: string
+  status: 'ok' | 'soon'
+  children: ReactNode
+}) {
+  return (
+    <div className={status === 'ok' ? 'os-card os-card-ready' : 'os-card'}>
+      <div className="os-card-head">
+        <span className="os-card-icon" aria-hidden="true">
+          {icon}
+        </span>
+        <div>
+          <b>{title}</b>
+          <StatusChip tone={status === 'ok' ? 'ok' : 'warn'}>
+            {status === 'ok' ? '사용 가능' : '빌드 준비 중'}
+          </StatusChip>
+        </div>
+      </div>
+      <div className="os-card-body">{children}</div>
+    </div>
+  )
+}
+
+export function PlanCard({
+  name,
+  price,
+  priceNote,
+  features,
+  recommended,
+}: {
+  name: string
+  price: string
+  priceNote?: string
+  features: string[]
+  recommended?: boolean
+}) {
+  return (
+    <div className={recommended ? 'plan-card plan-card-rec' : 'plan-card'}>
+      {recommended && <span className="plan-card-badge">추천</span>}
+      <b className="plan-card-name">{name}</b>
+      <div className="plan-card-price">
+        {price}
+        {priceNote && <span className="legal-price-note"> · {priceNote}</span>}
+      </div>
+      <ul className="plan-card-features">
+        {features.map((feature) => (
+          <li key={feature}>{feature}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}

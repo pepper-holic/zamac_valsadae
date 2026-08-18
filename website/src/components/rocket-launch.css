@@ -1,0 +1,85 @@
+.rocket-launch {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.rocket-star {
+  fill: var(--accent);
+  opacity: 0.35;
+  animation: rocket-twinkle 2.4s ease-in-out infinite;
+}
+.rocket-star:nth-child(2n) {
+  animation-delay: 0.6s;
+}
+.rocket-star:nth-child(3n) {
+  animation-delay: 1.1s;
+}
+
+.rocket-body-group {
+  animation: rocket-float 3.2s ease-in-out infinite;
+  transform-origin: 50px 60px;
+}
+
+.rocket-flame {
+  fill: var(--accent);
+  transform-origin: 50px 68px;
+  animation: rocket-flame-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.rocket-fin {
+  fill: var(--text-h);
+  opacity: 0.85;
+}
+
+.rocket-hull {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.rocket-window {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.rocket-window-dot {
+  fill: var(--accent);
+}
+
+@keyframes rocket-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes rocket-flame-pulse {
+  from {
+    transform: scaleY(0.85);
+  }
+  to {
+    transform: scaleY(1.15);
+  }
+}
+
+@keyframes rocket-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rocket-body-group,
+  .rocket-flame,
+  .rocket-star {
+    animation: none;
+  }
+}

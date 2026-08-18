@@ -1,4 +1,9 @@
+.legal-page {
+  max-width: 680px;
+}
+
 .legal-eyebrow {
+  font-family: var(--display);
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -7,9 +12,10 @@
   margin: 0 0 8px;
 }
 .legal-page-title {
-  font-size: clamp(24px, 3.4vw, 30px);
-  font-weight: 800;
-  letter-spacing: -0.4px;
+  font-family: var(--display);
+  font-size: clamp(26px, 3.6vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.6px;
   margin: 0 0 8px;
   color: var(--text-h);
 }
@@ -22,10 +28,12 @@
 }
 
 .legal-page h2 {
-  font-size: 16px;
-  font-weight: 800;
+  font-family: var(--display);
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
   color: var(--text-h);
-  margin: 26px 0 10px;
+  margin: 30px 0 12px;
 }
 .legal-page h4 {
   font-size: 13.5px;
@@ -183,9 +191,17 @@
   text-decoration: none;
   color: var(--text-h);
   font-size: 13.5px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 .legal-link-card:hover {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-accent);
+  transform: translateY(-1px);
+}
+.legal-link-card:active {
+  transform: translateY(0);
 }
 .legal-link-card-url {
   font-family: var(--mono);
@@ -203,41 +219,150 @@
   line-height: 1.6;
 }
 
-.legal-table-scroll {
-  overflow-x: auto;
+.legal-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 24px;
   border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  box-shadow: var(--shadow-accent);
+  transition: transform var(--duration-fast) var(--ease-out),
+    filter var(--duration-fast) var(--ease-out);
 }
-table.legal-plan-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0;
-  font-size: 13px;
+.legal-download-button:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
 }
-table.legal-plan-table th,
-table.legal-plan-table td {
-  border: 1px solid var(--border);
-  padding: 10px 12px;
-  text-align: left;
-  vertical-align: top;
+.legal-download-button:active {
+  transform: translateY(0) scale(0.98);
 }
-table.legal-plan-table th {
-  background: var(--code-bg);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text);
-  opacity: 0.75;
-}
-table.legal-plan-table td.price {
-  font-family: var(--mono);
-  white-space: nowrap;
-}
-table.legal-plan-table tr.rec td:first-child {
-  color: var(--accent);
-  font-weight: 800;
-}
+
 .legal-price-note {
   color: var(--text);
   opacity: 0.65;
   font-size: 11px;
+}
+
+/* ---------- OS download cards ---------- */
+.os-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+.os-card:hover {
+  transform: translateY(-2px);
+}
+.os-card-ready {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+.os-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.os-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.os-card-head b {
+  display: block;
+  font-family: var(--display);
+  font-size: 15px;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+.os-card-body {
+  margin-top: 10px;
+}
+.os-card-body p:last-child,
+.os-card-body ul:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Pricing cards ---------- */
+.plan-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin: 14px 0 20px;
+}
+.plan-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 18px;
+  background: var(--surface);
+  transition: transform var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.plan-card:hover {
+  transform: translateY(-2px);
+}
+.plan-card-rec {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-accent);
+}
+.plan-card-badge {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.plan-card-name {
+  display: block;
+  font-family: var(--display);
+  font-size: 14.5px;
+  color: var(--text-h);
+  margin-bottom: 8px;
+}
+.plan-card-price {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin-bottom: 14px;
+}
+.plan-card-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.plan-card-features li {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  padding-left: 16px;
+  position: relative;
+}
+.plan-card-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
 }

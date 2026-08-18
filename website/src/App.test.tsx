@@ -16,7 +16,7 @@ function renderAt(path: string) {
 describe('App routing', () => {
   it('renders the home page hero at /', () => {
     renderAt('/')
-    expect(screen.getByRole('heading', { name: 'Zamak_Valsadae', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '자막발사대', level: 1 })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '지금 다운로드' })).toBeInTheDocument()
   })
 

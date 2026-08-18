@@ -12,7 +12,9 @@
   align-items: center;
   gap: 24px;
   padding: 14px 28px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -20,8 +22,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 800;
-  font-size: 15px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 15.5px;
   letter-spacing: -0.2px;
   color: var(--text-h);
   text-decoration: none;
@@ -34,6 +37,10 @@
   background: var(--accent);
   object-fit: contain;
   flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.site-brand:hover .site-brand-mark {
+  transform: rotate(-6deg) scale(1.05);
 }
 
 .site-nav {
@@ -43,12 +50,15 @@
   flex: 1;
 }
 .site-nav-link {
+  position: relative;
   padding: 7px 12px;
   border-radius: 7px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
   text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 .site-nav-link:hover {
   background: var(--code-bg);
@@ -57,6 +67,16 @@
 .site-nav-link.active {
   background: var(--accent-bg);
   color: var(--accent);
+}
+.site-nav-link.active::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 .site-cta {
@@ -68,15 +88,21 @@
   font-size: 13.5px;
   text-decoration: none;
   white-space: nowrap;
+  transition: filter var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 .site-cta:hover {
   filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.site-cta:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .site-main {
   flex: 1;
   width: 100%;
-  max-width: 760px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 48px 24px 64px;
 }
@@ -87,7 +113,7 @@
   padding: 32px 24px 48px;
 }
 .site-footer-groups {
-  max-width: 760px;
+  max-width: 880px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -113,7 +139,7 @@
   color: var(--accent);
 }
 .site-footer-notice {
-  max-width: 760px;
+  max-width: 880px;
   margin: 20px auto 0;
   font-size: 11px;
   color: var(--text);
