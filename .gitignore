@@ -7,10 +7,16 @@ installer/debug_build/
 installer/dist/
 installer/launcher_crash.log
 backend/.venv/
+server/.venv/
 frontend/node_modules/
 frontend/dist/
 website/node_modules/
 website/dist/
+
+# Secrets - real values live only in each service's .env (never committed);
+# .env.example files stay tracked as templates.
+.env
+.env.local
 __pycache__/
 *.pyc
 .pytest_cache/

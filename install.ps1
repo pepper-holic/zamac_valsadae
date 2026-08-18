@@ -24,9 +24,27 @@ $PythonDownloadUrl = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-emb
 $NodeDownloadUrl = "https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip"
 $FfmpegDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
+# Both URLs above are pinned to an exact version, so their official SHA256
+# never changes - verified here against a MITM'd network or a compromised
+# CDN silently serving something else. (Source: python.org's published
+# .spdx.json for this release, and nodejs.org's SHASUMS256.txt for this
+# release.) ffmpeg intentionally has no pinned hash below: gyan.dev's
+# "release-essentials" URL is a rolling build with no fixed version to pin
+# a hash against - see the download step for that trade-off.
+$PythonZipSha256 = "0d57bb6cb078b74d23dbfe91f77d6780d45bed328911609f1f7ee2ba1606bf44"
+$NodeZipSha256 = "2b8f2256382f97ad51e29ff71f702961af466c4616393f767455501e6aece9b8"
+
 function Write-Step([string]$Message) {
     Write-Host ""
     Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Assert-Sha256([string]$FilePath, [string]$ExpectedSha256, [string]$Label) {
+    $actual = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
+    if ($actual -ne $ExpectedSha256.ToUpperInvariant()) {
+        Remove-Item -Path $FilePath -Force -ErrorAction SilentlyContinue
+        throw "$Label checksum mismatch (expected $ExpectedSha256, got $($actual.ToLowerInvariant())) - download may be corrupted or tampered with. Aborting."
+    }
 }
 
 function Move-ExtractedRoot([string]$ExtractDir, [string]$Destination) {
@@ -49,6 +67,7 @@ try {
         Write-Step "[1/5] Downloading embedded Python runtime (not yet installed)..."
         $zipPath = Join-Path $TmpDir "python-embed.zip"
         Invoke-WebRequest -Uri $PythonDownloadUrl -OutFile $zipPath
+        Assert-Sha256 -FilePath $zipPath -ExpectedSha256 $PythonZipSha256 -Label "Embedded Python download"
         Expand-Archive -Path $zipPath -DestinationPath $PythonDir -Force
     }
 
@@ -87,6 +106,7 @@ try {
         Write-Step "[2/5] Downloading embedded Node.js runtime (not yet installed)..."
         $zipPath = Join-Path $TmpDir "node.zip"
         Invoke-WebRequest -Uri $NodeDownloadUrl -OutFile $zipPath
+        Assert-Sha256 -FilePath $zipPath -ExpectedSha256 $NodeZipSha256 -Label "Embedded Node.js download"
         $extractDir = Join-Path $TmpDir "node-extract"
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
         Move-ExtractedRoot -ExtractDir $extractDir -Destination $NodeDir
@@ -97,6 +117,10 @@ try {
         Write-Step "[3/5] Embedded ffmpeg already installed."
     } else {
         Write-Step "[3/5] Downloading embedded ffmpeg (not yet installed)..."
+        # No checksum check here (unlike Python/Node above): this URL always
+        # points at gyan.dev's latest "release-essentials" build rather than
+        # a fixed version, so there is no stable published hash to pin
+        # against. Served over HTTPS from gyan.dev's own domain.
         $zipPath = Join-Path $TmpDir "ffmpeg.zip"
         Invoke-WebRequest -Uri $FfmpegDownloadUrl -OutFile $zipPath
         $extractDir = Join-Path $TmpDir "ffmpeg-extract"

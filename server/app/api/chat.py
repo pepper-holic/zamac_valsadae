@@ -3,8 +3,8 @@ import json
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from app.auth import verify_supabase_jwt
 from app.core.config import get_settings
+from app.rate_limit import check_rate_limit
 
 router = APIRouter()
 
@@ -12,13 +12,15 @@ router = APIRouter()
 @router.post("/v1/chat/completions")
 async def chat_completions(
     request: Request,
-    user_id: str = Depends(verify_supabase_jwt),
+    user_id: str = Depends(check_rate_limit),
 ) -> Response:
     settings = get_settings()
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="Server has no OpenAI API key configured yet")
 
     body = await request.body()
+    if len(body) > settings.chat_max_body_bytes:
+        raise HTTPException(status_code=413, detail="Request body too large")
     if settings.openai_model_override:
         try:
             payload = json.loads(body)

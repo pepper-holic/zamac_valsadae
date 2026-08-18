@@ -1,7 +1,9 @@
+import threading
 from pathlib import Path
 
 import pytest
 
+from app.core.config import Settings
 from app.models.schemas import Segment, SubtitleStyle, Word
 from app.services import render_service
 
@@ -260,6 +262,72 @@ def test_render_cancels_when_should_cancel_returns_true(monkeypatch, tmp_path):
             duration_seconds=2.0,
             should_cancel=lambda: True,
         )
+    assert fake.terminated
+
+
+class _HangingStderr:
+    """Simulates ffmpeg going completely silent without exiting - never
+    yields a line and never raises StopIteration."""
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        threading.Event().wait()  # blocks forever; only the daemon reader thread waits on this
+        raise StopIteration  # pragma: no cover - unreachable
+
+
+class _HangingFakeProcess:
+    def __init__(self):
+        self.stderr = _HangingStderr()
+        self.terminated = False
+
+    def wait(self) -> int:
+        return -1
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+def test_render_aborts_when_ffmpeg_stalls_with_no_output(monkeypatch, tmp_path):
+    fake = _HangingFakeProcess()
+    monkeypatch.setattr(render_service.subprocess, "Popen", lambda *a, **k: fake)
+    monkeypatch.setattr(
+        render_service, "get_settings", lambda: Settings(render_stall_timeout_seconds=0.05)
+    )
+
+    with pytest.raises(render_service.RenderError, match="응답이 없어"):
+        render_service.render(
+            media_path=tmp_path / "in.mp4",
+            ass_path=tmp_path / "styled.ass",
+            output_path=tmp_path / "out.mp4",
+            duration_seconds=2.0,
+        )
+
+    assert fake.terminated
+
+
+def test_render_still_checks_cancellation_while_ffmpeg_is_silent(monkeypatch, tmp_path):
+    """Regression test: should_cancel() used to only be checked when ffmpeg
+    emitted a stderr line, so a stalled/silent process could never be
+    cancelled. It must now be polled on a fixed interval regardless."""
+    fake = _HangingFakeProcess()
+    monkeypatch.setattr(render_service.subprocess, "Popen", lambda *a, **k: fake)
+    # A generous stall timeout so the cancellation path - not the stall
+    # path - is what raises.
+    monkeypatch.setattr(
+        render_service, "get_settings", lambda: Settings(render_stall_timeout_seconds=60)
+    )
+
+    with pytest.raises(render_service.RenderCancelled):
+        render_service.render(
+            media_path=tmp_path / "in.mp4",
+            ass_path=tmp_path / "styled.ass",
+            output_path=tmp_path / "out.mp4",
+            duration_seconds=2.0,
+            should_cancel=lambda: True,
+        )
+
     assert fake.terminated
 
 

@@ -19,6 +19,7 @@ from app.services.project_store import (
     ProjectCorruptedError,
     ProjectNotFoundError,
     ProjectStore,
+    UploadTooLargeError,
 )
 
 _CANCELLABLE_STATUSES = ("transcribing", "translating", "rendering")
@@ -146,6 +147,8 @@ async def add_item(
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.") from exc
+    except UploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail="파일이 너무 큽니다.") from exc
 
 
 @router.delete("/{project_id}/items/{item_id}", status_code=204)

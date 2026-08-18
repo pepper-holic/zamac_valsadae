@@ -62,6 +62,21 @@ class Settings:
     whisper_model_cache_dir: Path = WHISPER_MODEL_CACHE_DIR
     ffmpeg_path: str = FFMPEG_PATH
     ffprobe_path: str = FFPROBE_PATH
+    # ffprobe should return almost instantly; this only guards against a
+    # genuinely hung process (e.g. a corrupt/unreadable media file).
+    ffprobe_timeout_seconds: float = float(os.environ.get("FFPROBE_TIMEOUT_SECONDS", "30"))
+    # How long ffmpeg is allowed to produce zero output before the render is
+    # treated as stalled and aborted. Long videos can legitimately go a few
+    # seconds between progress lines, but a genuine hang (e.g. waiting on
+    # stdin, a broken filter graph) never recovers on its own.
+    render_stall_timeout_seconds: float = float(
+        os.environ.get("RENDER_STALL_TIMEOUT_SECONDS", "120")
+    )
+    # Sanity ceiling on a single uploaded media file, not a tight limit -
+    # this app is meant to handle multi-GB video, so the default is
+    # generous. Mainly guards against filling the disk from a fat-fingered
+    # or unexpected upload rather than an attacker (single-user local app).
+    max_upload_bytes: int = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024**3)))
     translation_api_key: str | None = os.environ.get("TRANSLATION_API_KEY")
     translation_api_base_url: str | None = os.environ.get("TRANSLATION_API_BASE_URL")
     hf_token: str | None = os.environ.get("HF_TOKEN")

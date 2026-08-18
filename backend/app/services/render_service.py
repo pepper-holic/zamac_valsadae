@@ -1,5 +1,7 @@
+import queue
 import re
 import subprocess
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -171,21 +173,26 @@ def _parse_progress_seconds(line: str) -> float | None:
 
 
 def probe_duration_seconds(media_path: Path) -> float:
-    result = subprocess.run(
-        [
-            get_settings().ffprobe_path,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(media_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    settings = get_settings()
+    try:
+        result = subprocess.run(
+            [
+                settings.ffprobe_path,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(media_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=settings.ffprobe_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RenderError("ffprobe가 응답하지 않아 중단했습니다 (미디어 파일 확인 필요).") from error
     return float(result.stdout.strip())
 
 
@@ -242,15 +249,56 @@ def render(
     )
     assert process.stderr is not None
 
+    # ffmpeg's stderr is read on a background thread and handed off through
+    # a queue so the main loop can poll on a fixed interval instead of
+    # blocking on `for line in process.stderr`. A plain blocking read means
+    # should_cancel() only gets checked when ffmpeg happens to emit a line -
+    # if it stalls (hung filter graph, waiting on stdin, ...) without
+    # producing output, cancellation would never fire and this would hang
+    # forever. Polling also lets us detect and abort a genuine stall.
+    line_queue: "queue.Queue[str | None]" = queue.Queue()
+
+    def _pump_stderr() -> None:
+        assert process.stderr is not None
+        try:
+            for line in process.stderr:
+                line_queue.put(line)
+        finally:
+            line_queue.put(None)
+
+    threading.Thread(target=_pump_stderr, daemon=True).start()
+
+    poll_interval_seconds = 1.0
+    stall_timeout_seconds = get_settings().render_stall_timeout_seconds
+    silence_elapsed_seconds = 0.0
     stderr_tail: list[str] = []
-    for line in process.stderr:
-        stderr_tail.append(line)
-        if len(stderr_tail) > 40:
-            stderr_tail.pop(0)
+
+    while True:
         if should_cancel is not None and should_cancel():
             process.terminate()
             process.wait()
             raise RenderCancelled("영상 렌더링이 취소되었습니다.")
+
+        try:
+            line = line_queue.get(timeout=poll_interval_seconds)
+        except queue.Empty:
+            silence_elapsed_seconds += poll_interval_seconds
+            if silence_elapsed_seconds >= stall_timeout_seconds:
+                process.terminate()
+                process.wait()
+                raise RenderError(
+                    f"ffmpeg가 {int(stall_timeout_seconds)}초 동안 응답이 없어 "
+                    "렌더링을 중단했습니다."
+                )
+            continue
+
+        silence_elapsed_seconds = 0.0
+        if line is None:  # stderr pipe closed - ffmpeg has exited
+            break
+
+        stderr_tail.append(line)
+        if len(stderr_tail) > 40:
+            stderr_tail.pop(0)
         if on_progress is not None and duration_seconds > 0:
             elapsed = _parse_progress_seconds(line)
             if elapsed is not None:

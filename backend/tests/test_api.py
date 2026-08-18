@@ -520,6 +520,50 @@ def test_translate_fills_translation_field(client, monkeypatch):
     assert item["segments"][0]["translation"] == "[translated] 안녕"
 
 
+def test_translate_does_not_clobber_a_concurrent_edit_to_a_sibling_item(client, store, monkeypatch):
+    """Regression test: _run_translation used to hold a stale Project
+    snapshot for the whole translation call and save() it at the end,
+    silently discarding any change made to a sibling item in the same
+    project while translation was running (e.g. another item's render
+    finishing). See ProjectStore.update_item.
+    """
+    ctx = _create_project_with_item(client)
+    sibling = _add_item(client, ctx["project_id"], filename="sibling.wav")
+    monkeypatch.setattr(
+        "app.services.transcription_queue.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.0, text="안녕")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    class FakeTranslator:
+        def translate_with_correction(
+            self, texts, glossary=None, context=None, window_before=None, window_after=None
+        ):
+            # Simulate a concurrent change to a sibling item while this
+            # translation call is still in flight.
+            store.update_item(
+                ctx["project_id"], sibling["id"], lambda item: setattr(item, "status", "rendered")
+            )
+            return texts, [f"[translated] {t}" for t in texts]
+
+        def extract_context(self, texts):
+            return ""
+
+    monkeypatch.setattr(
+        "app.api.translate.translation_service.get_translator", lambda *a, **k: FakeTranslator()
+    )
+
+    response = client.post(f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/translate")
+    assert response.status_code == 200
+
+    items = {item["id"]: item for item in client.get(f"/projects/{ctx['project_id']}").json()["items"]}
+    assert items[ctx["item_id"]]["segments"][0]["translation"] == "[translated] 안녕"
+    assert items[sibling["id"]]["status"] == "rendered"
+
+
 def test_translate_passes_logged_in_session_token_to_get_translator(client, monkeypatch):
     from app.services import auth_state
 

@@ -47,6 +47,11 @@ def _get_project_and_item(
 def _run_render(
     project_id: str, item_id: str, use_translation: bool, cut_deleted: bool, store: ProjectStore
 ) -> None:
+    # Read once to build the .ass file and probe duration - safe, since
+    # neither depends on edits made to the project while rendering runs.
+    # The *write-back* below must not reuse this snapshot (see
+    # ProjectStore.update_item docstring) or a segment edit made during the
+    # render would be silently discarded when this finishes.
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
     ass_path = store.render_ass_path(project_id, item_id)
@@ -69,32 +74,43 @@ def _run_render(
             ass_path=ass_path,
             output_path=output_path,
             duration_seconds=duration,
-            on_progress=make_progress_reporter(project, item, store),
+            on_progress=make_progress_reporter(project_id, item_id, store),
             should_cancel=lambda: cancellation.is_cancelled(item_id),
             cut_list=cut_list,
         )
-        item.rendered_path = str(output_path)
-        item.status = "rendered"
-        item.progress = 1.0
-        item.stage = None
-        item.started_at = None
-        item.error = None
+
+        def _mark_rendered(target: MediaItem) -> None:
+            target.rendered_path = str(output_path)
+            target.status = "rendered"
+            target.progress = 1.0
+            target.stage = None
+            target.started_at = None
+            target.error = None
+
+        store.update_item(project_id, item_id, _mark_rendered)
     except render_service.RenderCancelled:
-        item.status = "error"
-        item.stage = None
-        item.started_at = None
-        item.progress = None
-        item.error = "사용자가 렌더링을 취소했습니다."
+
+        def _mark_cancelled(target: MediaItem) -> None:
+            target.status = "error"
+            target.stage = None
+            target.started_at = None
+            target.progress = None
+            target.error = "사용자가 렌더링을 취소했습니다."
+
+        store.update_item(project_id, item_id, _mark_cancelled)
     except Exception as exc:  # pragma: no cover - depends on ffmpeg availability
         logger.exception("Render failed for item %s", item_id)
-        item.status = "error"
-        item.stage = None
-        item.started_at = None
-        item.error = str(exc)
+
+        def _mark_failed(target: MediaItem) -> None:
+            target.status = "error"
+            target.stage = None
+            target.started_at = None
+            target.error = str(exc)
+
+        store.update_item(project_id, item_id, _mark_failed)
     finally:
         cancellation.clear_cancel(item_id)
         ass_path.unlink(missing_ok=True)
-    store.save(project)
 
 
 @router.post("/{project_id}/items/{item_id}/render", response_model=MediaItem)
@@ -105,17 +121,20 @@ async def render_item(
     background_tasks: BackgroundTasks,
     store: ProjectStore = Depends(get_store),
 ) -> MediaItem:
-    project, item = _get_project_and_item(project_id, item_id, store)
+    _project, item = _get_project_and_item(project_id, item_id, store)
     if not item.segments:
         raise HTTPException(status_code=400, detail="자막이 없어 렌더링할 수 없습니다.")
 
     cancellation.clear_cancel(item_id)
-    item.status = "rendering"
-    item.stage = "rendering"
-    item.progress = 0.0
-    item.started_at = time.time()
-    item.error = None
-    store.save(project)
+
+    def _mark_rendering(target: MediaItem) -> None:
+        target.status = "rendering"
+        target.stage = "rendering"
+        target.progress = 0.0
+        target.started_at = time.time()
+        target.error = None
+
+    item = store.update_item(project_id, item_id, _mark_rendering) or item
 
     background_tasks.add_task(
         _run_render, project_id, item_id, request.use_translation, request.cut_deleted, store

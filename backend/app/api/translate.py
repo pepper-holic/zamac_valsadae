@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 def _run_translation(project_id: str, item_id: str, store: ProjectStore) -> None:
+    # Read once for the translator call itself (segments/glossary as they
+    # stood when translation started) - the *write-back* below must go
+    # through store.update_item(), not a held Project/MediaItem reference +
+    # save(), or a concurrent edit to the project (e.g. another item's
+    # render finishing, a segment edit) would be silently discarded when
+    # this finishes. See ProjectStore.update_item docstring.
     project = store.get(project_id)
     item = next(i for i in project.items if i.id == item_id)
     try:
@@ -31,7 +37,7 @@ def _run_translation(project_id: str, item_id: str, store: ProjectStore) -> None
         translated_segments = translation_service.translate_segments(
             item.segments,
             translator=translator,
-            on_progress=make_progress_reporter(project, item, store),
+            on_progress=make_progress_reporter(project_id, item_id, store),
             should_cancel=lambda: cancellation.is_cancelled(item_id),
             glossary=project.glossary,
             translation_memory=translation_memory,
@@ -44,29 +50,41 @@ def _run_translation(project_id: str, item_id: str, store: ProjectStore) -> None
                 if segment.translation
             },
         )
-        item.segments = readability_service.apply_readability(
+        final_segments = readability_service.apply_readability(
             translated_segments, use_translation=True
         )
-        item.status = "translated"
-        item.progress = 1.0
-        item.stage = None
-        item.started_at = None
-        item.error = None
+
+        def _mark_translated(target: MediaItem) -> None:
+            target.segments = final_segments
+            target.status = "translated"
+            target.progress = 1.0
+            target.stage = None
+            target.started_at = None
+            target.error = None
+
+        store.update_item(project_id, item_id, _mark_translated)
     except translation_service.TranslationCancelled:
-        item.status = "error"
-        item.stage = None
-        item.started_at = None
-        item.progress = None
-        item.error = "사용자가 번역을 취소했습니다."
+
+        def _mark_cancelled(target: MediaItem) -> None:
+            target.status = "error"
+            target.stage = None
+            target.started_at = None
+            target.progress = None
+            target.error = "사용자가 번역을 취소했습니다."
+
+        store.update_item(project_id, item_id, _mark_cancelled)
     except Exception as exc:  # pragma: no cover - depends on optional heavy deps / network
         logger.exception("Translation failed for item %s", item_id)
-        item.status = "error"
-        item.stage = None
-        item.started_at = None
-        item.error = str(exc)
+
+        def _mark_failed(target: MediaItem) -> None:
+            target.status = "error"
+            target.stage = None
+            target.started_at = None
+            target.error = str(exc)
+
+        store.update_item(project_id, item_id, _mark_failed)
     finally:
         cancellation.clear_cancel(item_id)
-    store.save(project)
 
 
 @router.post("/{project_id}/items/{item_id}/translate", response_model=MediaItem)
@@ -87,12 +105,15 @@ async def translate_item(
         raise HTTPException(status_code=400, detail="번역할 세그먼트가 없습니다. 먼저 전사를 실행하세요.")
 
     cancellation.clear_cancel(item_id)
-    item.status = "translating"
-    item.progress = 0.0
-    item.stage = None
-    item.started_at = time.time()
-    item.error = None
-    store.save(project)
+
+    def _mark_translating(target: MediaItem) -> None:
+        target.status = "translating"
+        target.progress = 0.0
+        target.stage = None
+        target.started_at = time.time()
+        target.error = None
+
+    item = store.update_item(project_id, item_id, _mark_translating) or item
 
     background_tasks.add_task(_run_translation, project_id, item_id, store)
     return item

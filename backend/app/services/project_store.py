@@ -1,4 +1,6 @@
 import json
+import os
+import re
 import shutil
 import threading
 import uuid
@@ -7,7 +9,22 @@ from pathlib import Path
 from typing import BinaryIO
 from pydantic import ValidationError
 
+from app.core.config import get_settings
 from app.models.schemas import MediaItem, MediaItemStatus, Project, ProjectStatusSummary, Segment
+
+_UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024
+
+# project_id/item_id are always generated server-side as uuid.uuid4().hex
+# (see create_project/add_item below), so this is the only shape a
+# legitimate id ever takes. Enforcing it where ids are turned into
+# filesystem paths closes off path traversal via a crafted id (e.g. one
+# containing "../") coming from a URL path parameter - FastAPI's router
+# does not otherwise constrain that value.
+_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _is_valid_id(value: str) -> bool:
+    return bool(_ID_RE.match(value))
 
 
 class ProjectNotFoundError(Exception):
@@ -22,6 +39,11 @@ class ItemNotFoundError(Exception):
 
 class ProjectCorruptedError(Exception):
     """JSON 파일이 깨졌거나 Pydantic 모델 스키마와 일치하지 않을 때 발생하는 예외"""
+    pass
+
+
+class UploadTooLargeError(Exception):
+    """업로드된 파일이 허용 최대 크기를 초과했을 때 발생하는 예외"""
     pass
 
 
@@ -41,18 +63,26 @@ class ProjectStore:
         self._project_locks_guard = threading.Lock()
 
     def _project_dir(self, project_id: str) -> Path:
+        if not _is_valid_id(project_id):
+            raise ProjectNotFoundError(project_id)
         return self._root_dir / project_id
 
     def _metadata_path(self, project_id: str) -> Path:
         return self._project_dir(project_id) / "project.json"
 
     def media_path(self, project_id: str, item_id: str) -> Path:
+        if not _is_valid_id(item_id):
+            raise ItemNotFoundError(item_id)
         return self._project_dir(project_id) / f"media_{item_id}"
 
     def rendered_media_path(self, project_id: str, item_id: str) -> Path:
+        if not _is_valid_id(item_id):
+            raise ItemNotFoundError(item_id)
         return self._project_dir(project_id) / f"rendered_{item_id}.mp4"
 
     def render_ass_path(self, project_id: str, item_id: str) -> Path:
+        if not _is_valid_id(item_id):
+            raise ItemNotFoundError(item_id)
         return self._project_dir(project_id) / f"render_{item_id}.ass"
 
     def create_project(self, name: str = "") -> Project:
@@ -71,11 +101,23 @@ class ProjectStore:
         item_id = uuid.uuid4().hex
         media_file = self.media_path(project_id, item_id)
         media_file.parent.mkdir(parents=True, exist_ok=True)
+        max_bytes = get_settings().max_upload_bytes
         if isinstance(media_bytes, bytes):
+            if len(media_bytes) > max_bytes:
+                raise UploadTooLargeError(filename)
             media_file.write_bytes(media_bytes)
         else:
-            with media_file.open("wb") as destination:
-                shutil.copyfileobj(media_bytes, destination)
+            written = 0
+            try:
+                with media_file.open("wb") as destination:
+                    while chunk := media_bytes.read(_UPLOAD_CHUNK_SIZE):
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise UploadTooLargeError(filename)
+                        destination.write(chunk)
+            except UploadTooLargeError:
+                media_file.unlink(missing_ok=True)
+                raise
 
         item = MediaItem(
             id=item_id, filename=filename, media_path=str(media_file), status="uploaded"
@@ -144,9 +186,21 @@ class ProjectStore:
             raise ProjectCorruptedError(f"프로젝트 메타데이터를 파싱할 수 없습니다: {project_id}") from e
 
     def save(self, project: Project) -> None:
+        """Writes project.json atomically (write to a temp file, then
+        rename over the target). A crash or power loss mid-write can no
+        longer leave a truncated/corrupted project.json - the rename either
+        lands the old content or the new content, never a half-written
+        file. Plain write_text() would truncate the file first and could
+        leave it empty/partial if interrupted mid-write.
+        """
         metadata_path = self._metadata_path(project.id)
         metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        metadata_path.write_text(project.model_dump_json(indent=2), encoding="utf-8")
+        tmp_path = metadata_path.with_name(f".{metadata_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            tmp_path.write_text(project.model_dump_json(indent=2), encoding="utf-8")
+            os.replace(tmp_path, metadata_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def _lock_for(self, project_id: str) -> threading.Lock:
         with self._project_locks_guard:
@@ -167,6 +221,27 @@ class ProjectStore:
             mutate(project)
             self.save(project)
             return project
+
+    def update_item(
+        self, project_id: str, item_id: str, mutate: Callable[[MediaItem], None]
+    ) -> MediaItem | None:
+        """Like update(), but scoped to one item inside the project.
+
+        Looks the item up fresh under the same per-project lock instead of
+        mutating a long-held item reference from an earlier get() - callers
+        with a long-running background job (rendering, transcription) must
+        use this instead of holding onto a `Project`/`MediaItem` snapshot
+        and calling save() at the end, which would silently overwrite any
+        other change made to the project while the job was running.
+        """
+
+        def mutate_project(project: Project) -> None:
+            item = next((i for i in project.items if i.id == item_id), None)
+            if item is not None:
+                mutate(item)
+
+        project = self.update(project_id, mutate_project)
+        return next((i for i in project.items if i.id == item_id), None)
 
     def delete(self, project_id: str) -> None:
         project_dir = self._project_dir(project_id)

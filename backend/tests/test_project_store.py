@@ -1,7 +1,12 @@
 import pytest
 
 from app.models.schemas import Segment
-from app.services.project_store import ItemNotFoundError, ProjectNotFoundError, ProjectStore
+from app.services.project_store import (
+    ItemNotFoundError,
+    ProjectNotFoundError,
+    ProjectStore,
+    UploadTooLargeError,
+)
 
 
 @pytest.fixture
@@ -36,6 +41,26 @@ def test_add_item_saves_media_and_appends_to_project(store):
 def test_add_item_to_missing_project_raises(store):
     with pytest.raises(ProjectNotFoundError):
         store.add_item("does-not-exist", filename="a.wav", media_bytes=b"1")
+
+
+def test_add_item_rejects_stream_over_max_upload_bytes(store, monkeypatch):
+    import io
+
+    from app.core.config import Settings
+
+    monkeypatch.setattr(
+        "app.services.project_store.get_settings", lambda: Settings(max_upload_bytes=10)
+    )
+    project = store.create_project()
+    oversized = io.BytesIO(b"x" * 11)
+
+    with pytest.raises(UploadTooLargeError):
+        store.add_item(project.id, filename="too-big.mp4", media_bytes=oversized)
+
+    reloaded = store.get(project.id)
+    assert reloaded.items == []
+    leftover_media = list(store._project_dir(project.id).glob("media_*"))
+    assert leftover_media == [], "partial upload should be cleaned up, not left on disk"
 
 
 def test_add_multiple_items_to_same_project(store):
@@ -98,6 +123,21 @@ def test_get_missing_project_raises(store):
         store.get("does-not-exist")
 
 
+def test_path_traversal_project_id_is_rejected(store, tmp_path):
+    """project_id/item_id are always server-generated uuid4().hex, but the
+    API takes them from a URL path parameter with no format constraint - a
+    crafted id must not be able to escape the store's root directory."""
+    outside_secret = tmp_path.parent / "outside_secret.txt"
+    outside_secret.write_text("should not be reachable")
+
+    with pytest.raises(ProjectNotFoundError):
+        store.get(f"../{outside_secret.name}")
+
+    with pytest.raises(ItemNotFoundError):
+        project = store.create_project()
+        store.media_path(project.id, f"../../{outside_secret.name}")
+
+
 def test_load_translation_memory_missing_returns_empty_dict(store):
     project = store.create_project()
 
@@ -149,6 +189,43 @@ def test_save_persists_updates(store):
 
     assert reloaded.items[0].id == item.id
     assert reloaded.items[0].status == "transcribed"
+
+
+def test_save_is_atomic_no_leftover_tmp_file_on_success(store):
+    project = store.create_project()
+
+    store.save(project)
+
+    metadata_dir = store._metadata_path(project.id).parent
+    leftovers = list(metadata_dir.glob("*.tmp"))
+    assert leftovers == []
+
+
+def test_save_does_not_corrupt_existing_file_when_write_fails(store, monkeypatch):
+    project = store.create_project()
+    item = store.add_item(project.id, filename="a.wav", media_bytes=b"123")
+    good_project = store.get(project.id)
+
+    project = store.get(project.id)
+    project.items[0].status = "should-not-be-persisted"
+    original_write_text = type(store._metadata_path(project.id)).write_text
+
+    def _boom(self, *args, **kwargs):
+        if self.suffix == ".tmp":
+            raise OSError("disk full (simulated)")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr("pathlib.Path.write_text", _boom)
+
+    with pytest.raises(OSError):
+        store.save(project)
+
+    monkeypatch.undo()
+    reloaded = store.get(project.id)
+    assert reloaded.items[0].id == item.id
+    assert reloaded.items[0].status == good_project.items[0].status
+    metadata_dir = store._metadata_path(project.id).parent
+    assert list(metadata_dir.glob("*.tmp")) == []
 
 
 def test_list_returns_all_created_projects(store):
