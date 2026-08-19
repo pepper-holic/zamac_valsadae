@@ -188,6 +188,17 @@ npm run test
 - Vitest + React Testing Library를 사용합니다. 순수 로직(유틸/훅) 위주로 작성되어 있으며,
   UI 동작은 `npm run dev`로 직접 확인합니다.
 
+### 프론트엔드 E2E(화면 배선 확인)
+
+```powershell
+cd frontend
+npm run test:e2e
+```
+
+- Playwright. 백엔드 API를 전부 목(mock)으로 대체해 업로드→세그먼트 표시→내보내기 같은
+  화면 간 연결이 실제로 배선돼 있는지만 빠르게 확인합니다 — 실제 Whisper 전사/ffmpeg
+  렌더링까지 검증하는 완전한 E2E는 아닙니다(모델 다운로드·처리 시간이 커서 범위 밖).
+
 ## 환경변수
 
 자주 건드리는 것만 요약합니다 — `backend/`·`server/`·`frontend/` 전체 환경변수 표는
@@ -237,3 +248,5 @@ npm run test
 ## 라이선스
 
 이 저장소는 비공개(All rights reserved)입니다 — 자세한 내용은 [`LICENSE`](./LICENSE)를 참고하세요.
+함께 배포되는 서드파티 오픈소스 구성요소(faster-whisper, ffmpeg 등)의 라이선스 고지는
+[`NOTICE.md`](./NOTICE.md)를 참고하세요.

@@ -15,6 +15,8 @@ import { useProjectWorkspace } from './hooks/useProjectWorkspace'
 import { useSegmentEditing } from './hooks/useSegmentEditing'
 import { useReviewDiffs } from './hooks/useReviewDiffs'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useUpdateCheck } from './hooks/useUpdateCheck'
+import { useGlobalErrorToasts } from './hooks/useGlobalErrorToasts'
 import { startColumnResize, startRowResize } from './utils/resize'
 
 function App() {
@@ -88,7 +90,14 @@ function App() {
     toasts: reviewToasts,
   } = useReviewDiffs(project, selectedItemId, handleSegmentSaved, handleSegmentsSaved)
 
-  const toasts = [...segmentEditingErrorToasts, ...reviewToasts]
+  const { updateToast } = useUpdateCheck()
+  const { globalErrorToasts } = useGlobalErrorToasts()
+  const toasts = [
+    ...segmentEditingErrorToasts,
+    ...reviewToasts,
+    ...globalErrorToasts,
+    ...(updateToast ? [updateToast] : []),
+  ]
 
   resetOnProjectLoadRef.current = useCallback(() => {
     resetHistory()

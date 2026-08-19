@@ -1,9 +1,13 @@
+import type { ReactNode } from 'react'
+
 export type ToastTone = 'info' | 'warning' | 'error'
 
 export type Toast = {
   id: string
   tone: ToastTone
-  message: string
+  // ReactNode (not just string) so a toast like the update-available banner
+  // can include a link, not just plain text.
+  message: ReactNode
   progress?: number | null
   onDismiss?: () => void
 }

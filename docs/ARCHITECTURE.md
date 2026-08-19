@@ -161,7 +161,15 @@ store.update(project_id, lambda project: ...)
 `backend/`/`frontend/`만 고쳤다면 **배포 스크립트가 필요 없습니다** — 사용자가 각자
 `install.bat`/설치 프로그램으로 직접 받아서 씁니다(중앙 서버가 코드를 서빙하지 않음).
 새 버전을 배포하려면 `deploy-release.ps1`로 새 설치 프로그램(`.exe`)을 만들어 웹사이트
-다운로드 링크에 올리는 것뿐입니다 — 자동 업데이트 체계는 없습니다.
+다운로드 링크에 올리는 것뿐입니다 — 완전 자동 업데이트 체계는 없고, 앱 실행 시
+`website/public/latest-version.json`을 조회해 "새 버전 있음" 배너만 띄워줍니다
+(`frontend/src/hooks/useUpdateCheck.tsx`).
+
+**버전 올릴 때 3곳을 함께 갱신할 것** (자동 동기화 없음, 수동 체크리스트):
+1. `installer/installer.iss`의 `MyAppVersion`
+2. `frontend/src/version.ts`의 `APP_VERSION`
+3. `website/public/latest-version.json`의 `version`/`url`
+4. `CHANGELOG.md`에 릴리스 항목 추가
 
 셋 다 `-KeyPath`로 오라클 VM SSH 개인키를 받습니다. 자세한 서버 쪽 구조(systemd, nginx,
 백업/롤백 동작)는 `server/README.md`에 있습니다.
@@ -199,6 +207,9 @@ store.update(project_id, lambda project: ...)
 | `SUPABASE_URL` / `SUPABASE_JWT_SECRET` | JWT 검증용 (URL 있으면 JWKS 우선, 없으면 HS256 폴백) |
 | `CHAT_RATE_LIMIT_PER_MINUTE` | 기본 20, 0이면 비활성화 |
 | `CHAT_MAX_BODY_BYTES` | 기본 300000 |
+| `CHAT_MAX_COMPLETION_TOKENS` | 기본 1024. 클라이언트가 `max_tokens`를 안 보내도(현재 데스크톱 앱이 그럼) 이 값으로 강제 주입/클램프 — 없으면 응답 길이(=비용)가 무제한 |
+| `CHAT_DAILY_LIMIT_PER_USER` | 기본 300. 사용자별 24시간 롤링 요청 수 상한, 0이면 비활성화. 분당 제한만으로는 하루 총 요청 수가 사실상 무제한이라 별도로 둠 |
+| `CHAT_DAILY_TOKEN_LIMIT_PER_USER` | 기본 200000. 사용자별 24시간 롤링 누적 토큰(프롬프트+응답) 상한, 응답의 `usage.total_tokens`로 집계, 0이면 비활성화. 요청 "횟수" 상한(`CHAT_DAILY_LIMIT_PER_USER`)은 요청 하나의 프롬프트 크기까지는 안 막아서, 실제 비용 기준 상한은 이 값 |
 
 **`frontend/`** — `frontend/.env.development`에서 `VITE_API_BASE_URL` 관리.
 **`website/`** — 별도 필수 환경변수 없음(순수 정적 빌드).
