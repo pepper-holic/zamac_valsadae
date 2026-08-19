@@ -31,9 +31,21 @@ def _get_pipeline(
     if _DIARIZATION_MODEL not in _PIPELINE_CACHE:
         if on_stage is not None:
             on_stage("downloading_model")
-        _PIPELINE_CACHE[_DIARIZATION_MODEL] = Pipeline.from_pretrained(
-            _DIARIZATION_MODEL, use_auth_token=hf_token
-        )
+        try:
+            pipeline = Pipeline.from_pretrained(_DIARIZATION_MODEL, use_auth_token=hf_token)
+        except Exception as error:
+            # A missing HF_TOKEN is already caught earlier with a clear message
+            # (transcription_queue.py) - this is the other common failure mode:
+            # a token that's valid but hasn't accepted the gated model's terms,
+            # which HuggingFace surfaces as an auth/permission error with a raw
+            # English message and stack trace that isn't actionable for a user
+            # reading it in the app's error field.
+            raise ValueError(
+                "화자 분리 모델 접근이 거부되었습니다 - "
+                "https://huggingface.co/pyannote/speaker-diarization-3.1 페이지에서 "
+                "이용약관에 동의했는지 확인하세요."
+            ) from error
+        _PIPELINE_CACHE[_DIARIZATION_MODEL] = pipeline
         if on_stage is not None:
             on_stage("processing")
     return _PIPELINE_CACHE[_DIARIZATION_MODEL]  # type: ignore[return-value]

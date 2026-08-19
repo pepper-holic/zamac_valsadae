@@ -82,7 +82,7 @@ export function HelpModal({ onClose }: Props) {
                   <td className="mono">화자 분리</td>
                   <td>
                     전사 탭의 &quot;화자 분리&quot; 체크박스. 누가 말했는지 문장마다 라벨(SPEAKER_00 등)을
-                    붙입니다. HuggingFace 토큰(HF_TOKEN) 설정과 최초 1회 모델 다운로드가 필요하며, 처리
+                    붙입니다. <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">HuggingFace 토큰(HF_TOKEN)</a> 설정과 최초 1회 모델 다운로드가 필요하며, 처리
                     시간이 더 걸립니다.
                   </td>
                 </tr>
@@ -238,8 +238,8 @@ export function HelpModal({ onClose }: Props) {
                 <tr>
                   <td className="mono">화자 분리가 안 됨 / 오류</td>
                   <td>
-                    HuggingFace 토큰(<code>HF_TOKEN</code>)이 설정되어 있는지, 그리고
-                    pyannote/speaker-diarization-3.1 모델 페이지에서 이용약관에 동의했는지
+                    <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">HuggingFace 토큰(HF_TOKEN)</a>이 설정되어 있는지, 그리고
+                    <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener noreferrer"> pyannote/speaker-diarization-3.1 모델 페이지</a>에서 이용약관에 동의했는지
                     확인하세요. 둘 다 없으면 화자 분리 없이 전사만 진행됩니다.
                   </td>
                 </tr>

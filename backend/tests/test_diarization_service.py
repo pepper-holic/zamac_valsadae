@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from app.models.schemas import Segment
+from app.services import diarization_service
 from app.services.diarization_service import SpeakerTurn, assign_speakers, diarize
 
 
@@ -77,3 +80,16 @@ def test_assign_speakers_empty_turns_returns_none_speakers():
     updated = assign_speakers(segments, [])
 
     assert updated[0].speaker is None
+
+
+def test_get_pipeline_wraps_gated_model_error_with_friendly_korean_message(monkeypatch):
+    import pyannote.audio
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("401 Client Error: Repository Not Found for url ... gated")
+
+    monkeypatch.setattr(pyannote.audio.Pipeline, "from_pretrained", boom)
+    diarization_service._PIPELINE_CACHE.clear()
+
+    with pytest.raises(ValueError, match="이용약관"):
+        diarize(Path("video.mp4"), hf_token="fake-token")
