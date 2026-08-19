@@ -16,6 +16,7 @@ function projectLabel(project: Project): string {
 
 export function ProjectManager({ projects, onSelectProject, onProjectDeleted }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function handleDelete(project: Project) {
     if (
@@ -26,9 +27,12 @@ export function ProjectManager({ projects, onSelectProject, onProjectDeleted }: 
       return
     }
     setDeletingId(project.id)
+    setDeleteError(null)
     try {
       await deleteProject(project.id)
       onProjectDeleted(project.id)
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error))
     } finally {
       setDeletingId(null)
     }
@@ -43,36 +47,39 @@ export function ProjectManager({ projects, onSelectProject, onProjectDeleted }: 
   }
 
   return (
-    <ul className="home-project-list">
-      {projects.map((project) => (
-        <li key={project.id} className="home-project-card">
-          <button
-            type="button"
-            className="home-project-card-main"
-            onClick={() => onSelectProject(project.id)}
-          >
-            <span className="home-project-name">{projectLabel(project)}</span>
-            <span className="home-project-meta">
-              파일 {project.items.length}개
-              {project.items.length > 0 && (
-                <>
-                  {' · '}
-                  {project.items.filter((i) => i.status === 'rendered' || i.status === 'translated').length}개 완료
-                </>
-              )}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="home-project-delete"
-            onClick={() => handleDelete(project)}
-            disabled={deletingId === project.id}
-            data-tip="이 프로젝트를 삭제합니다 (되돌릴 수 없음)."
-          >
-            {deletingId === project.id ? '삭제 중...' : '삭제'}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <>
+      {deleteError && <p className="error-text">{deleteError}</p>}
+      <ul className="home-project-list">
+        {projects.map((project) => (
+          <li key={project.id} className="home-project-card">
+            <button
+              type="button"
+              className="home-project-card-main"
+              onClick={() => onSelectProject(project.id)}
+            >
+              <span className="home-project-name">{projectLabel(project)}</span>
+              <span className="home-project-meta">
+                파일 {project.items.length}개
+                {project.items.length > 0 && (
+                  <>
+                    {' · '}
+                    {project.items.filter((i) => i.status === 'rendered' || i.status === 'translated').length}개 완료
+                  </>
+                )}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="home-project-delete"
+              onClick={() => handleDelete(project)}
+              disabled={deletingId === project.id}
+              data-tip="이 프로젝트를 삭제합니다 (되돌릴 수 없음)."
+            >
+              {deletingId === project.id ? '삭제 중...' : '삭제'}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }

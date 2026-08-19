@@ -78,7 +78,7 @@ export function SegmentDetailPanel({
     setError(null)
     try {
       const updated = await updateSegment(project.id, item.id, segment.id, { [field]: value })
-      onSegmentSaved(updated as Segment)
+      onSegmentSaved(updated)
       setJustSaved(true)
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
       savedTimerRef.current = setTimeout(() => setJustSaved(false), SAVED_FLASH_MS)
@@ -105,14 +105,24 @@ export function SegmentDetailPanel({
   async function handleDelete() {
     if (!segment) return
     if (!window.confirm('이 문장을 삭제할까요? 되돌릴 수 없습니다.')) return
-    await deleteSegment(project.id, item.id, segment.id)
-    onSegmentDeleted(segment.id)
+    setError(null)
+    try {
+      await deleteSegment(project.id, item.id, segment.id)
+      onSegmentDeleted(segment.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   async function handleToggleReviewed() {
     if (!segment) return
-    const updated = await updateSegment(project.id, item.id, segment.id, { reviewed: !segment.reviewed })
-    onSegmentSaved(updated as Segment)
+    setError(null)
+    try {
+      const updated = await updateSegment(project.id, item.id, segment.id, { reviewed: !segment.reviewed })
+      onSegmentSaved(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   return (

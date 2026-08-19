@@ -43,6 +43,7 @@ function makeProps(overrides: Partial<Parameters<typeof SegmentList>[0]> = {}) {
     onFindReplace: vi.fn().mockResolvedValue(undefined),
     onBulkDelete: vi.fn().mockResolvedValue(undefined),
     onBulkMarkReviewed: vi.fn().mockResolvedValue(undefined),
+    onError: vi.fn(),
     ...overrides,
   }
 }

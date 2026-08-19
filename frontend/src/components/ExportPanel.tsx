@@ -48,6 +48,7 @@ export function ExportPanel({
   const [cutDeleted, setCutDeleted] = useState(false)
   const [isStartingRender, setIsStartingRender] = useState(false)
   const [isCancellingRender, setIsCancellingRender] = useState(false)
+  const [renderActionError, setRenderActionError] = useState<string | null>(null)
 
   const hasSegments = item.segments.length > 0
   const hasTranslations = item.segments.some((segment) => segment.translation)
@@ -75,9 +76,12 @@ export function ExportPanel({
 
   async function handleRender() {
     setIsStartingRender(true)
+    setRenderActionError(null)
     try {
       const updated = await renderItem(project.id, item.id, renderUseTranslation, cutDeleted)
       onItemUpdated(updated)
+    } catch (error) {
+      setRenderActionError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsStartingRender(false)
     }
@@ -85,9 +89,12 @@ export function ExportPanel({
 
   async function handleCancelRender() {
     setIsCancellingRender(true)
+    setRenderActionError(null)
     try {
       const updated = await cancelItem(project.id, item.id)
       onItemUpdated(updated)
+    } catch (error) {
+      setRenderActionError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsCancellingRender(false)
     }
@@ -229,6 +236,7 @@ export function ExportPanel({
         </div>
       )}
       {item.status === 'error' && item.error && <p className="error-text">{item.error}</p>}
+      {renderActionError && <p className="error-text">{renderActionError}</p>}
 
       <AiReviewSection
         project={project}

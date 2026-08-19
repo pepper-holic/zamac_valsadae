@@ -12,6 +12,7 @@ import {
 } from '../api/client'
 import type { Project, Segment } from '../api/types'
 import { updateItemInProject } from '../utils/projectHelpers'
+import { useErrorToasts } from './useErrorToasts'
 
 type HistoryState = { canUndo: boolean; canRedo: boolean }
 
@@ -22,6 +23,8 @@ export function useSegmentEditing(
   selectedSegmentId: string | null,
   setSelectedSegmentId: Dispatch<SetStateAction<string | null>>,
 ) {
+  const { errorToasts, pushError } = useErrorToasts()
+
   // 아이템별 undo/redo 가능 여부 - 백엔드 히스토리가 아이템 단위 프로세스 메모리에
   // 있어 조회 전용 엔드포인트가 없으므로, 이 세션에서 각 아이템을 마지막으로 편집/
   // undo/redo한 결과를 프론트에 기억해두고 파일을 다시 선택해도 유지합니다.
@@ -86,119 +89,151 @@ export function useSegmentEditing(
   const handleSplitSegment = useCallback(
     async (splitAt: number) => {
       if (!project || !selectedItemId || !selectedSegmentId) return
-      const [first, second] = await splitSegment(project.id, selectedItemId, selectedSegmentId, splitAt)
-      setProject((prev) =>
-        prev
-          ? updateItemInProject(prev, selectedItemId, (i) => {
-              const index = i.segments.findIndex((s) => s.id === selectedSegmentId)
-              if (index === -1) return i
-              const segments = [...i.segments]
-              segments.splice(index, 1, first, second)
-              return { ...i, segments }
-            })
-          : prev,
-      )
-      setSelectedSegmentId(first.id)
-      setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      try {
+        const [first, second] = await splitSegment(project.id, selectedItemId, selectedSegmentId, splitAt)
+        setProject((prev) =>
+          prev
+            ? updateItemInProject(prev, selectedItemId, (i) => {
+                const index = i.segments.findIndex((s) => s.id === selectedSegmentId)
+                if (index === -1) return i
+                const segments = [...i.segments]
+                segments.splice(index, 1, first, second)
+                return { ...i, segments }
+              })
+            : prev,
+        )
+        setSelectedSegmentId(first.id)
+        setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, selectedSegmentId, setProject, setSelectedSegmentId, setItemHistoryState],
+    [project, selectedItemId, selectedSegmentId, setProject, setSelectedSegmentId, setItemHistoryState, pushError],
   )
 
   const handleMergeSegments = useCallback(
     async (segmentIds: string[]) => {
       if (!project || !selectedItemId) return
-      const merged = await mergeSegments(project.id, selectedItemId, segmentIds)
-      setProject((prev) =>
-        prev
-          ? updateItemInProject(prev, selectedItemId, (i) => {
-              const idsToMerge = new Set(segmentIds)
-              const insertIndex = i.segments.findIndex((s) => idsToMerge.has(s.id))
-              const remaining = i.segments.filter((s) => !idsToMerge.has(s.id))
-              remaining.splice(insertIndex, 0, merged)
-              return { ...i, segments: remaining }
-            })
-          : prev,
-      )
-      setSelectedSegmentId(merged.id)
-      setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      try {
+        const merged = await mergeSegments(project.id, selectedItemId, segmentIds)
+        setProject((prev) =>
+          prev
+            ? updateItemInProject(prev, selectedItemId, (i) => {
+                const idsToMerge = new Set(segmentIds)
+                const insertIndex = i.segments.findIndex((s) => idsToMerge.has(s.id))
+                const remaining = i.segments.filter((s) => !idsToMerge.has(s.id))
+                remaining.splice(insertIndex, 0, merged)
+                return { ...i, segments: remaining }
+              })
+            : prev,
+        )
+        setSelectedSegmentId(merged.id)
+        setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, setProject, setSelectedSegmentId, setItemHistoryState],
+    [project, selectedItemId, setProject, setSelectedSegmentId, setItemHistoryState, pushError],
   )
 
   const handleFindReplace = useCallback(
     async (field: 'text' | 'translation', find: string, replace: string) => {
       if (!project || !selectedItemId) return
-      const updated = await findReplaceSegments(project.id, selectedItemId, field, find, replace)
-      setProject((prev) =>
-        prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: updated })) : prev,
-      )
-      setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      try {
+        const updated = await findReplaceSegments(project.id, selectedItemId, field, find, replace)
+        setProject((prev) =>
+          prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: updated })) : prev,
+        )
+        setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, setProject, setItemHistoryState],
+    [project, selectedItemId, setProject, setItemHistoryState, pushError],
   )
 
   const handleBulkDelete = useCallback(
     async (segmentIds: string[]) => {
       if (!project || !selectedItemId) return
-      // One request for the whole batch (not N concurrent calls) so the
-      // backend records it as a single undo step and there's no read-modify-
-      // write race between segments landing at once.
-      const remaining = await bulkDeleteSegments(project.id, selectedItemId, segmentIds)
-      setProject((prev) =>
-        prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: remaining })) : prev,
-      )
-      setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      try {
+        // One request for the whole batch (not N concurrent calls) so the
+        // backend records it as a single undo step and there's no read-modify-
+        // write race between segments landing at once.
+        const remaining = await bulkDeleteSegments(project.id, selectedItemId, segmentIds)
+        setProject((prev) =>
+          prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: remaining })) : prev,
+        )
+        setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, setProject, setItemHistoryState],
+    [project, selectedItemId, setProject, setItemHistoryState, pushError],
   )
 
   const handleBulkMarkReviewed = useCallback(
     async (segmentIds: string[]) => {
       if (!project || !selectedItemId) return
-      const updates = await bulkUpdateSegments(
-        project.id,
-        selectedItemId,
-        segmentIds.map((id) => ({ id, update: { reviewed: true } })),
-      )
-      const byId = new Map(updates.map((u) => [u.id, u as Segment]))
-      setProject((prev) =>
-        prev
-          ? updateItemInProject(prev, selectedItemId, (i) => ({
-              ...i,
-              segments: i.segments.map((s) => byId.get(s.id) ?? s),
-            }))
-          : prev,
-      )
-      setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      try {
+        const updates = await bulkUpdateSegments(
+          project.id,
+          selectedItemId,
+          segmentIds.map((id) => ({ id, update: { reviewed: true } })),
+        )
+        const byId = new Map(updates.map((u) => [u.id, u]))
+        setProject((prev) =>
+          prev
+            ? updateItemInProject(prev, selectedItemId, (i) => ({
+                ...i,
+                segments: i.segments.map((s) => byId.get(s.id) ?? s),
+              }))
+            : prev,
+        )
+        setItemHistoryState(selectedItemId, { canUndo: true, canRedo: false })
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, setProject, setItemHistoryState],
+    [project, selectedItemId, setProject, setItemHistoryState, pushError],
   )
 
   const handleUndo = useCallback(async () => {
     if (!project || !selectedItemId || !canUndo) return
-    const result = await undoItem(project.id, selectedItemId)
-    setProject((prev) =>
-      prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
-    )
-    setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
-  }, [project, selectedItemId, canUndo, setProject, setItemHistoryState])
+    try {
+      const result = await undoItem(project.id, selectedItemId)
+      setProject((prev) =>
+        prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
+      )
+      setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
+    } catch (error) {
+      pushError(error)
+    }
+  }, [project, selectedItemId, canUndo, setProject, setItemHistoryState, pushError])
 
   const handleRedo = useCallback(async () => {
     if (!project || !selectedItemId || !canRedo) return
-    const result = await redoItem(project.id, selectedItemId)
-    setProject((prev) =>
-      prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
-    )
-    setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
-  }, [project, selectedItemId, canRedo, setProject, setItemHistoryState])
+    try {
+      const result = await redoItem(project.id, selectedItemId)
+      setProject((prev) =>
+        prev ? updateItemInProject(prev, selectedItemId, (i) => ({ ...i, segments: result.segments })) : prev,
+      )
+      setItemHistoryState(selectedItemId, { canUndo: result.can_undo, canRedo: result.can_redo })
+    } catch (error) {
+      pushError(error)
+    }
+  }, [project, selectedItemId, canRedo, setProject, setItemHistoryState, pushError])
 
   const handleResizeSegment = useCallback(
     async (segmentId: string, edge: 'start' | 'end', time: number) => {
       if (!project || !selectedItemId) return
-      const updated = await updateSegment(project.id, selectedItemId, segmentId, { [edge]: time })
-      handleSegmentSaved(updated as Segment)
+      try {
+        const updated = await updateSegment(project.id, selectedItemId, segmentId, { [edge]: time })
+        handleSegmentSaved(updated)
+      } catch (error) {
+        pushError(error)
+      }
     },
-    [project, selectedItemId, handleSegmentSaved],
+    [project, selectedItemId, handleSegmentSaved, pushError],
   )
 
   return {
@@ -216,5 +251,7 @@ export function useSegmentEditing(
     handleUndo,
     handleRedo,
     handleResizeSegment,
+    errorToasts,
+    pushError,
   }
 }

@@ -73,6 +73,8 @@ function App() {
     handleUndo,
     handleRedo,
     handleResizeSegment,
+    errorToasts: segmentEditingErrorToasts,
+    pushError: pushSegmentEditingError,
   } = useSegmentEditing(project, setProject, selectedItemId, selectedSegmentId, setSelectedSegmentId)
 
   const {
@@ -83,8 +85,10 @@ function App() {
     handleRejectDiff,
     handleAcceptAllDiffs,
     handleRejectAllDiffs,
-    toasts,
+    toasts: reviewToasts,
   } = useReviewDiffs(project, selectedItemId, handleSegmentSaved, handleSegmentsSaved)
+
+  const toasts = [...segmentEditingErrorToasts, ...reviewToasts]
 
   resetOnProjectLoadRef.current = useCallback(() => {
     resetHistory()
@@ -294,6 +298,7 @@ function App() {
                 onFindReplace={handleFindReplace}
                 onBulkDelete={handleBulkDelete}
                 onBulkMarkReviewed={handleBulkMarkReviewed}
+                onError={pushSegmentEditingError}
               />
             </div>
           </div>

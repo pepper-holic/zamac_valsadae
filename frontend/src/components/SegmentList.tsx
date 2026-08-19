@@ -17,6 +17,7 @@ type Props = {
   onFindReplace: (field: 'text' | 'translation', find: string, replace: string) => Promise<void>
   onBulkDelete: (segmentIds: string[]) => Promise<void>
   onBulkMarkReviewed: (segmentIds: string[]) => Promise<void>
+  onError: (error: unknown) => void
 }
 
 type FilterKey = 'all' | 'unreviewed' | 'needsCheck' | 'ok' | 'reviewed'
@@ -66,6 +67,7 @@ export function SegmentList({
   onFindReplace,
   onBulkDelete,
   onBulkMarkReviewed,
+  onError,
 }: Props) {
   const activeRowRef = useRef<HTMLLIElement>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -149,6 +151,8 @@ export function SegmentList({
     try {
       const fillerIds = await detectFillerSegments(projectId, itemId, fillerLanguage)
       setCheckedIds((prev) => new Set([...prev, ...fillerIds]))
+    } catch (error) {
+      onError(error)
     } finally {
       setIsDetectingFillers(false)
     }
@@ -219,8 +223,12 @@ export function SegmentList({
 
   async function handleToggleReviewed(segment: Segment, event: React.MouseEvent) {
     event.stopPropagation()
-    const updated = await updateSegment(projectId, itemId, segment.id, { reviewed: !segment.reviewed })
-    onSegmentSaved(updated as Segment)
+    try {
+      const updated = await updateSegment(projectId, itemId, segment.id, { reviewed: !segment.reviewed })
+      onSegmentSaved(updated)
+    } catch (error) {
+      onError(error)
+    }
   }
 
   const startIndex = page * PAGE_SIZE
@@ -403,7 +411,18 @@ export function SegmentList({
                   onClick={(event) => event.stopPropagation()}
                   data-tip="병합/일괄 작업을 위해 이 문장을 선택합니다."
                 />
-                <button type="button" className={rowClass} onClick={() => onSelect(segment.id)}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className={rowClass}
+                  onClick={() => onSelect(segment.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSelect(segment.id)
+                    }
+                  }}
+                >
                   <span className="segment-index">{index + 1}</span>
                   <span className="segment-time">{formatClock(segment.start)}</span>
                   <span className="segment-text">
@@ -420,31 +439,35 @@ export function SegmentList({
                   )}
                   {pendingDiffs > 0 && <span className="segment-diff-badge">{pendingDiffs}</span>}
                   <span className="segment-row-actions">
+                    {/* Same action as clicking the row itself - decorative, not a
+                        separate keyboard stop, to avoid two adjacent controls that
+                        do the identical thing. */}
                     <span
                       className="segment-row-action"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onSelect(segment.id)
-                      }}
+                      aria-hidden="true"
                       data-tip="상세 편집 패널에서 이 문장을 수정합니다."
                     >
                       ✎
                     </span>
                     <span
                       className="segment-row-action"
+                      aria-hidden="true"
                       data-tip={qualityTip(segment) ?? '검수 메모가 없습니다.'}
                     >
                       💬
                     </span>
                   </span>
-                  <span
+                  <button
+                    type="button"
                     className={segment.reviewed ? 'reviewed-toggle checked' : 'reviewed-toggle'}
                     onClick={(event) => handleToggleReviewed(segment, event)}
+                    aria-pressed={segment.reviewed}
+                    aria-label={segment.reviewed ? '검토 완료 표시 해제' : '검토 완료로 표시'}
                     data-tip={segment.reviewed ? '검토 완료 표시 해제' : '검토 완료로 표시'}
                   >
                     {segment.reviewed ? '✓' : ''}
-                  </span>
-                </button>
+                  </button>
+                </div>
               </li>
             )
           })}
