@@ -424,7 +424,17 @@ export function SegmentList({
                   }}
                 >
                   <span className="segment-index">{index + 1}</span>
-                  <span className="segment-time">{formatClock(segment.start)}</span>
+                  <span className="segment-time">
+                    {isPlaying && (
+                      <>
+                        <span className="segment-playing-icon" aria-hidden="true">
+                          ▶
+                        </span>
+                        <span className="sr-only">재생 중 </span>
+                      </>
+                    )}
+                    {formatClock(segment.start)}
+                  </span>
                   <span className="segment-text">
                     {segment.speaker && <span className="segment-speaker">{segment.speaker}</span>}
                     {segment.translation && (

@@ -127,11 +127,22 @@
 }
 
 .segment-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text);
   opacity: 0.8;
   padding-top: 2px;
+}
+
+/* Non-color indicator for "currently playing" - the row background tint
+   alone isn't enough for colorblind/low-vision users to tell it apart
+   from the selected state. */
+.segment-playing-icon {
+  font-size: 9px;
+  color: var(--accent);
 }
 
 .segment-text {

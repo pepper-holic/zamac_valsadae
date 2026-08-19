@@ -4,6 +4,21 @@
   height: 100svh;
 }
 
+/* Visually hides content while keeping it in the accessibility tree - for
+   state that's otherwise communicated by color/icon alone (sighted users
+   see the icon, screen reader users get this text). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---------- Hover guide tooltips ----------
    The bubble itself is rendered by <GlobalTooltip> (portaled to <body>,
    position: fixed, computed from the hovered element's real screen
