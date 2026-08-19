@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import auth, export, models, projects, review, segments, transcribe, translate
@@ -23,6 +24,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[logging.StreamHandler(), logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")],
 )
+logger = logging.getLogger(__name__)
 
 FRONTEND_DIST_DIR = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -60,6 +62,16 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        # FastAPI's default handlers already cover HTTPException/validation
+        # errors with proper 4xx bodies - this only fires for genuinely
+        # unhandled exceptions, which would otherwise surface to the browser
+        # as a bare, unlogged 500 with no JSON body (and, under pythonw.exe's
+        # headless desktop build, easy to miss entirely without app.log).
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(status_code=500, content={"detail": "서버 오류가 발생했습니다."})
 
     @app.on_event("startup")
     async def _recover_interrupted_projects_on_startup() -> None:

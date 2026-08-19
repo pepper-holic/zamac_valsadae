@@ -1,6 +1,7 @@
 import pytest
+from fastapi.testclient import TestClient
 
-from app.main import recover_interrupted_projects
+from app.main import app, recover_interrupted_projects
 from app.services.project_store import ProjectStore
 
 
@@ -78,3 +79,32 @@ def test_recover_interrupted_projects_handles_projects_with_multiple_items(tmp_p
     reloaded = store.get(project.id)
     assert reloaded.items[0].status == "error"
     assert reloaded.items[1].status == "transcribed"
+
+
+def test_unhandled_exception_returns_structured_500_and_does_not_leak_trace():
+    """Anything that isn't an HTTPException (FastAPI's default handlers
+    already cover those) used to propagate as a bare, unlogged 500. The
+    global handler in app.main should convert it into a stable JSON body
+    instead - this test adds a route that deliberately raises, hits it, then
+    removes the route again so it doesn't leak into other tests.
+    """
+
+    @app.get("/__test_unhandled_error__")
+    def _boom():
+        raise RuntimeError("boom")
+
+    # The route was appended after the catch-all frontend StaticFiles mount
+    # (registered in create_app()) - since Starlette matches routes in
+    # registration order, a Mount("/") would swallow this path first if left
+    # at the end. Move it to the front so it's tried before that mount.
+    route = app.router.routes.pop()
+    app.router.routes.insert(0, route)
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.get("/__test_unhandled_error__")
+
+        assert response.status_code == 500
+        assert response.json() == {"detail": "서버 오류가 발생했습니다."}
+        assert "boom" not in response.text
+    finally:
+        app.router.routes.remove(route)
