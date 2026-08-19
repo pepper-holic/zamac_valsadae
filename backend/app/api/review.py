@@ -5,6 +5,7 @@ from fastapi.responses import Response
 
 from app.api.deps import get_store
 from app.models.schemas import ReviewImportResult
+from app.services.http_headers import content_disposition_attachment
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 from app.services.review_service import (
     build_compact_review_package,
@@ -43,7 +44,7 @@ async def get_review_package(
     return Response(
         content=body,
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition_attachment(filename)},
     )
 
 

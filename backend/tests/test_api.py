@@ -1241,6 +1241,28 @@ def test_export_srt(client, monkeypatch):
     assert "00:00:00,000 --> 00:00:01,500" in response.text
 
 
+def test_export_filename_with_quote_does_not_break_content_disposition_header(client, monkeypatch):
+    ctx = _create_project_with_item(client, filename='evil".srt')
+    monkeypatch.setattr(
+        "app.services.transcription_queue.whisper_service.transcribe",
+        lambda *a, **k: [Segment(id="s1", start=0.0, end=1.5, text="안녕하세요")],
+    )
+    client.post(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/transcribe",
+        json={"model": "small"},
+    )
+
+    response = client.get(
+        f"/projects/{ctx['project_id']}/items/{ctx['item_id']}/export", params={"format": "srt"}
+    )
+
+    assert response.status_code == 200
+    disposition = response.headers["content-disposition"]
+    # The RFC 5987 filename* form has no quoted attribute at all - a raw
+    # quote from the original filename can't break out of anything here.
+    assert disposition.startswith("attachment; filename*=utf-8''")
+
+
 def test_review_package_download(client, monkeypatch):
     ctx = _create_project_with_item(client)
     monkeypatch.setattr(

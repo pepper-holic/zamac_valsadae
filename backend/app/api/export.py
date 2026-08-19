@@ -10,6 +10,7 @@ from app.api.deps import get_store
 from app.models.schemas import ExportFormat, ExportTextMode, MediaItem, Project, RenderRequest
 from app.services import cancellation, render_service
 from app.services.progress_reporter import make_progress_reporter
+from app.services.http_headers import content_disposition_attachment
 from app.services.project_store import ProjectNotFoundError, ProjectStore
 from app.services.subtitle_format import to_ass, to_json, to_srt, to_ttml, to_vtt
 
@@ -189,5 +190,5 @@ async def export_item(
     return Response(
         content=body,
         media_type=_CONTENT_TYPES[format],
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": content_disposition_attachment(filename)},
     )
